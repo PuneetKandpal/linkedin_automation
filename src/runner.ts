@@ -61,13 +61,11 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
       continue;
     }
 
-    // headings
+    // headings (treated as normal text; no special handling)
     const headingMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
     if (headingMatch) {
       flushList();
-      flushParagraph();
-      const text = sanitizeInlineMarkdown(headingMatch[2].trim());
-      if (text) blocks.push({ type: 'heading', text });
+      paragraph.push(headingMatch[2].trim());
       continue;
     }
 
@@ -81,11 +79,19 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
       continue;
     }
 
-    // list items
-    const listMatch = trimmed.match(/^[-*+]\s+(.*)$/);
-    if (listMatch) {
+    // unordered list items
+    const ulMatch = trimmed.match(/^[-*+]\s+(.*)$/);
+    if (ulMatch) {
       flushParagraph();
-      list.push(`- ${listMatch[1].trim()}`);
+      list.push(`- ${ulMatch[1].trim()}`);
+      continue;
+    }
+
+    // ordered list items
+    const olMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+    if (olMatch) {
+      flushParagraph();
+      list.push(`${olMatch[1]}. ${olMatch[2].trim()}`);
       continue;
     }
 
@@ -102,9 +108,13 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
 function sanitizeInlineMarkdown(text: string): string {
   return text
     .replace(/`([^`]*)`/g, '$1')
+    .replace(/\*\*\*([^*]+)\*\*\*/g, '$1')
+    .replace(/___([^_]+)___/g, '$1')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/_([^_]+)_/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
     .trim();
 }

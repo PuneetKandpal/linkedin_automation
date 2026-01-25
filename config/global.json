@@ -1,0 +1,16 @@
+{
+  "browser": {
+    "headless": false,
+    "slowMo": 0,
+    "defaultTimeout": 30000
+  },
+  "execution": {
+    "maxArticlesPerRun": 1,
+    "closeBrowserOnFailure": true
+  },
+  "captcha": {
+    "provider": "capsolver",
+    "timeoutMs": 120000,
+    "maxAttempts": 1
+  }
+}

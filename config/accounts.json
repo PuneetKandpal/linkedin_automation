@@ -1,0 +1,15 @@
+[
+  {
+    "accountId": "acct_01",
+    "displayName": "Mohit Kandpal",
+    "email": "user1@company.com",
+    "profileDir": "./profiles/acct_01",
+    "proxy": {
+      "server": "http://ip:port",
+      "username": "user",
+      "password": "pass"
+    },
+    "timezone": "Asia/Kolkata",
+    "status": "active"
+  }
+]

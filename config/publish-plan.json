@@ -1,0 +1,9 @@
+[
+  {
+    "jobId": "job_001",
+    "accountId": "acct_01",
+    "articleId": "art_001",
+    "delayProfile": "default",
+    "typingProfile": "medium"
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "articleId": "art_001",
+    "language": "en",
+    "title": "Why AI Agents Are Replacing SaaS",
+    "coverImagePath": "https://picsum.photos/200/300?grayscale",
+    "communityPostText": "test",
+    "content": [
+      {
+        "type": "paragraph",
+        "text": "The software industry is undergoing a fundamental shift."
+      },
+      {
+        "type": "paragraph",
+        "text": "AI agents are moving from experimentation to production."
+      },
+      {
+        "type": "paragraph",
+        "text": "This will redefine how products are built and sold."
+      }
+    ]
+  }
+]

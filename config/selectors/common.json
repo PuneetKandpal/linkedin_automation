@@ -1,0 +1,4 @@
+{
+  "captchaIframe": "iframe[src*='captcha']",
+  "toastMessage": "div[role='alert']"
+}

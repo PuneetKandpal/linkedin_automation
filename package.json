@@ -1,0 +1,35 @@
+{
+  "name": "linkedin-article-publisher",
+  "version": "1.0.0",
+  "description": "Config-driven LinkedIn Article Publisher using Playwright with Page Object Model",
+  "main": "dist/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "bootstrap": "ts-node src/bootstrap.ts",
+    "codegen": "npx playwright codegen --browser=chromium --user-data-dir=./profiles/acct_01 https://www.linkedin.com",
+    "trace:show": "npx playwright show-trace ./output/traces/latest.zip",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "linkedin",
+    "automation",
+    "playwright",
+    "article-publisher"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@playwright/test": "^1.58.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

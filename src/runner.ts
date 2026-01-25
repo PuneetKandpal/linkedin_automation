@@ -36,6 +36,7 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
 
   let paragraph: string[] = [];
   let list: string[] = [];
+  let quote: string[] = [];
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
@@ -51,6 +52,13 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
     list = [];
   };
 
+  const flushQuote = () => {
+    if (quote.length === 0) return;
+    const text = quote.join('\n').trimEnd();
+    if (text) blocks.push({ type: 'quote', text });
+    quote = [];
+  };
+
   for (const raw of lines) {
     const line = raw.trimEnd();
     const trimmed = line.trim();
@@ -58,6 +66,27 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
     if (!trimmed) {
       flushList();
       flushParagraph();
+      flushQuote();
+      continue;
+    }
+
+    // horizontal rules (treat as blank separator)
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      flushList();
+      flushParagraph();
+      flushQuote();
+      continue;
+    }
+
+    // image embeds → convert to descriptive paragraph
+    const imageMatch = trimmed.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+    if (imageMatch) {
+      flushList();
+      flushParagraph();
+      flushQuote();
+      const alt = imageMatch[1] || 'Image';
+      const url = imageMatch[2];
+      blocks.push({ type: 'paragraph', text: `${alt} (${url})` });
       continue;
     }
 
@@ -65,6 +94,7 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
     const headingMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
     if (headingMatch) {
       flushList();
+      flushQuote();
       paragraph.push(headingMatch[2].trim());
       continue;
     }
@@ -74,16 +104,17 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
     if (quoteMatch) {
       flushList();
       flushParagraph();
-      const text = quoteMatch[1].trim();
-      if (text) blocks.push({ type: 'quote', text });
+      quote.push(quoteMatch[1].trim());
       continue;
     }
 
+    flushQuote();
+
     // unordered list items
-    const ulMatch = trimmed.match(/^[-*+]\s+(.*)$/);
+    const ulMatch = trimmed.match(/^([-*+])\s+(.*)$/);
     if (ulMatch) {
       flushParagraph();
-      list.push(`- ${ulMatch[1].trim()}`);
+      list.push(`${ulMatch[1]} ${ulMatch[2].trim()}`);
       continue;
     }
 
@@ -102,6 +133,7 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
 
   flushList();
   flushParagraph();
+  flushQuote();
   return blocks;
 }
 

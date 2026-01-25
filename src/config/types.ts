@@ -40,7 +40,8 @@ export interface Article {
   articleId: string;
   language: string;
   title: string;
-  content: ArticleContentBlock[];
+  content?: ArticleContentBlock[];
+  markdownContent?: string;
   coverImagePath?: string;
   communityPostText?: string;
 }

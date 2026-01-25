@@ -1,7 +1,7 @@
 import { BrowserContext } from '@playwright/test';
 import { copyFileSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
-import { AppConfig, PublishJob } from './config/types';
+import { AppConfig, PublishJob, ArticleContentBlock } from './config/types';
 import { ConfigLoader } from './config/loader';
 import { Logger } from './engine/logger';
 import { DelayEngine } from './engine/delay.engine';
@@ -21,6 +21,92 @@ export interface PublishResult {
   articleUrl?: string;
   error?: string;
   timestamp: string;
+}
+
+function resolveArticleBlocks(article: { markdownContent?: string; content?: ArticleContentBlock[] }): ArticleContentBlock[] {
+  if (article.markdownContent && article.markdownContent.trim().length > 0) {
+    return markdownToBlocks(article.markdownContent);
+  }
+  throw new Error('Article has no markdownContent');
+}
+
+function markdownToBlocks(markdown: string): ArticleContentBlock[] {
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const blocks: ArticleContentBlock[] = [];
+
+  let paragraph: string[] = [];
+  let list: string[] = [];
+
+  const flushParagraph = () => {
+    if (paragraph.length === 0) return;
+    const text = sanitizeInlineMarkdown(paragraph.join(' ').trim());
+    if (text) blocks.push({ type: 'paragraph', text });
+    paragraph = [];
+  };
+
+  const flushList = () => {
+    if (list.length === 0) return;
+    const text = sanitizeInlineMarkdown(list.join('\n').trim());
+    if (text) blocks.push({ type: 'list', text });
+    list = [];
+  };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      flushList();
+      flushParagraph();
+      continue;
+    }
+
+    // headings
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      flushList();
+      flushParagraph();
+      const text = sanitizeInlineMarkdown(headingMatch[2].trim());
+      if (text) blocks.push({ type: 'heading', text });
+      continue;
+    }
+
+    // blockquote
+    const quoteMatch = trimmed.match(/^>\s?(.*)$/);
+    if (quoteMatch) {
+      flushList();
+      flushParagraph();
+      const text = sanitizeInlineMarkdown(quoteMatch[1].trim());
+      if (text) blocks.push({ type: 'quote', text });
+      continue;
+    }
+
+    // list items
+    const listMatch = trimmed.match(/^[-*+]\s+(.*)$/);
+    if (listMatch) {
+      flushParagraph();
+      list.push(`- ${listMatch[1].trim()}`);
+      continue;
+    }
+
+    // normal paragraph line (wrap)
+    flushList();
+    paragraph.push(trimmed);
+  }
+
+  flushList();
+  flushParagraph();
+  return blocks;
+}
+
+function sanitizeInlineMarkdown(text: string): string {
+  return text
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
+    .trim();
 }
 
 /**
@@ -174,7 +260,8 @@ export class ArticlePublisherRunner {
           : undefined
       );
       await articleEditorPage.typeTitle(article.title);
-      await articleEditorPage.typeContent(article.content);
+      const blocks = resolveArticleBlocks(article);
+      await articleEditorPage.typeContent(blocks);
 
       await publishPage.publish({
         communityPostText: article.communityPostText,

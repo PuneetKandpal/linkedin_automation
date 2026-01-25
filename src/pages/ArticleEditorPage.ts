@@ -82,7 +82,7 @@ export class ArticleEditorPage extends BasePage {
   }
 
   private async handleCoverModalIfPresent(): Promise<void> {
-    const dialog = this.page.locator("role=dialog >> text=Add cover image");
+    const dialog = this.page.locator("role=dialog >> text=/Add cover image/i");
 
     try {
       if (!(await dialog.isVisible({ timeout: 5000 }))) {
@@ -94,26 +94,50 @@ export class ArticleEditorPage extends BasePage {
 
     this.logger.info('Cover modal detected, confirming');
 
-    const confirmSelectors = [
-      "role=dialog >> role=button[name='Next']",
+    // Prefer clicking "Next" once it becomes enabled.
+    const nextBtn = this.page.locator("role=dialog >> role=button[name='Next']").first();
+    const start = Date.now();
+    while (Date.now() - start < 20000) {
+      try {
+        if (await nextBtn.isVisible({ timeout: 500 })) {
+          if (await nextBtn.isEnabled()) {
+            await nextBtn.click();
+            break;
+          }
+        }
+      } catch {
+        // ignore
+      }
+      await this.delayEngine.wait(250);
+    }
+
+    // Fallbacks for UI variants
+    const fallbackConfirmSelectors = [
       "role=dialog >> role=button[name='Done']",
       "role=dialog >> role=button[name='Save']",
       "role=dialog >> role=button[name='Apply']",
+      "role=dialog >> role=button[name='Close']",
+      "role=dialog >> role=button[name='Dismiss']",
+      "role=dialog >> role=button[name='Cancel']",
     ];
 
-    for (const selector of confirmSelectors) {
-      const btn = this.page.locator(selector).first();
-      try {
-        if (await btn.isVisible({ timeout: 1000 })) {
-          if (!(await btn.isEnabled())) {
-            continue;
+    try {
+      if (await dialog.isVisible({ timeout: 1000 })) {
+        for (const selector of fallbackConfirmSelectors) {
+          const btn = this.page.locator(selector).first();
+          try {
+            if (await btn.isVisible({ timeout: 500 })) {
+              if (!(await btn.isEnabled())) continue;
+              await btn.click();
+              break;
+            }
+          } catch {
+            // try next
           }
-          await btn.click();
-          break;
         }
-      } catch {
-        // try next
       }
+    } catch {
+      // ignore
     }
 
     try {
@@ -253,7 +277,13 @@ export class ArticleEditorPage extends BasePage {
       
       this.logger.debug(`Typing block ${i + 1}/${contentBlocks.length}`, { type: block.type });
 
-      if (block.type === 'paragraph') {
+      if (block.type === 'heading') {
+        await this.typeHeading(block.text);
+      } else if (block.type === 'list') {
+        await this.typeList(block.text);
+      } else if (block.type === 'quote') {
+        await this.typeQuote(block.text);
+      } else {
         await this.typeParagraph(block.text);
       }
 
@@ -272,6 +302,38 @@ export class ArticleEditorPage extends BasePage {
     await editorElement.press('Enter');
     await editorElement.press('Enter');
     
+    await this.delayEngine.wait(300);
+  }
+
+  private async typeHeading(text: string): Promise<void> {
+    // LinkedIn editor supports headings; typing plain text still works even if styling isn't applied.
+    await this.humanEngine.typeHumanLike(text, this.editorSelectors.editor);
+
+    const editorElement = this.page.locator(this.editorSelectors.editor).first();
+    await editorElement.press('Enter');
+    await editorElement.press('Enter');
+    await this.delayEngine.wait(300);
+  }
+
+  private async typeQuote(text: string): Promise<void> {
+    await this.humanEngine.typeHumanLike(text, this.editorSelectors.editor);
+
+    const editorElement = this.page.locator(this.editorSelectors.editor).first();
+    await editorElement.press('Enter');
+    await editorElement.press('Enter');
+    await this.delayEngine.wait(300);
+  }
+
+  private async typeList(text: string): Promise<void> {
+    const lines = text.replace(/\r\n/g, '\n').split('\n').map(l => l.trim()).filter(Boolean);
+    const editorElement = this.page.locator(this.editorSelectors.editor).first();
+
+    for (const line of lines) {
+      await this.humanEngine.typeHumanLike(line, this.editorSelectors.editor);
+      await editorElement.press('Enter');
+    }
+
+    await editorElement.press('Enter');
     await this.delayEngine.wait(300);
   }
 

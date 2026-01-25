@@ -39,14 +39,14 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
-    const text = sanitizeInlineMarkdown(paragraph.join(' ').trim());
+    const text = paragraph.join(' ').trim();
     if (text) blocks.push({ type: 'paragraph', text });
     paragraph = [];
   };
 
   const flushList = () => {
     if (list.length === 0) return;
-    const text = sanitizeInlineMarkdown(list.join('\n').trim());
+    const text = list.join('\n').trim();
     if (text) blocks.push({ type: 'list', text });
     list = [];
   };
@@ -74,7 +74,7 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
     if (quoteMatch) {
       flushList();
       flushParagraph();
-      const text = sanitizeInlineMarkdown(quoteMatch[1].trim());
+      const text = quoteMatch[1].trim();
       if (text) blocks.push({ type: 'quote', text });
       continue;
     }
@@ -103,20 +103,6 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
   flushList();
   flushParagraph();
   return blocks;
-}
-
-function sanitizeInlineMarkdown(text: string): string {
-  return text
-    .replace(/`([^`]*)`/g, '$1')
-    .replace(/\*\*\*([^*]+)\*\*\*/g, '$1')
-    .replace(/___([^_]+)___/g, '$1')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/_([^_]+)_/g, '$1')
-    .replace(/~~([^~]+)~~/g, '$1')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
-    .trim();
 }
 
 /**

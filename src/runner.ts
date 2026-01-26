@@ -31,7 +31,11 @@ function resolveArticleBlocks(article: { markdownContent?: string; content?: Art
 }
 
 export function markdownToBlocks(markdown: string): ArticleContentBlock[] {
-  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const normalized = markdown
+    .replace(/\r\n/g, '\n')
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n');
+  const lines = normalized.split('\n');
   const blocks: ArticleContentBlock[] = [];
 
   let paragraph: string[] = [];

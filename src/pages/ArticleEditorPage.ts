@@ -272,6 +272,10 @@ export class ArticleEditorPage extends BasePage {
     await this.humanEngine.scrollToElement(this.editorSelectors.editor);
     await this.delayEngine.wait(800);
 
+    const editorElement = this.page.locator(this.editorSelectors.editor).first();
+    await editorElement.click();
+    await this.delayEngine.wait(150);
+
     for (let i = 0; i < contentBlocks.length; i++) {
       const block = contentBlocks[i];
       
@@ -296,33 +300,29 @@ export class ArticleEditorPage extends BasePage {
   }
 
   private async typeParagraph(text: string): Promise<void> {
-    await this.humanEngine.typeHumanLike(text, this.editorSelectors.editor);
+    await this.humanEngine.typeHumanLike(text, this.editorSelectors.editor, { click: false });
     
-    const editorElement = this.page.locator(this.editorSelectors.editor).first();
-    await editorElement.press('Enter');
-    await editorElement.press('Enter');
+    await this.page.keyboard.press('Enter');
+    await this.page.keyboard.press('Enter');
     await this.delayEngine.wait(300);
   }
 
   private async typeHeading(text: string): Promise<void> {
-    const editorElement = this.page.locator(this.editorSelectors.editor).first();
-
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
-    await editorElement.press(`${modifier}+B`);
-    await this.humanEngine.typeHumanLike(text, this.editorSelectors.editor);
-    await editorElement.press(`${modifier}+B`);
+    await this.page.keyboard.press(`${modifier}+B`);
+    await this.humanEngine.typeHumanLike(text, this.editorSelectors.editor, { click: false });
+    await this.page.keyboard.press(`${modifier}+B`);
 
-    await editorElement.press('Enter');
-    await editorElement.press('Enter');
+    await this.page.keyboard.press('Enter');
+    await this.page.keyboard.press('Enter');
     await this.delayEngine.wait(300);
   }
 
   private async typeQuote(text: string): Promise<void> {
-    await this.humanEngine.typeHumanLike(text, this.editorSelectors.editor);
+    await this.humanEngine.typeHumanLike(text, this.editorSelectors.editor, { click: false });
 
-    const editorElement = this.page.locator(this.editorSelectors.editor).first();
-    await editorElement.press('Enter');
-    await editorElement.press('Enter');
+    await this.page.keyboard.press('Enter');
+    await this.page.keyboard.press('Enter');
     await this.delayEngine.wait(300);
   }
 
@@ -345,18 +345,23 @@ export class ArticleEditorPage extends BasePage {
     const shortcut = style === 'ordered' ? `${modifier}+Shift+7` : `${modifier}+Shift+8`;
 
     // Enable list mode
-    await editorElement.press(shortcut);
+    await this.page.keyboard.press(shortcut);
     await this.delayEngine.wait(150);
 
-    for (const line of lines) {
-      await this.humanEngine.typeHumanLike(line, this.editorSelectors.editor);
-      await editorElement.press('Enter');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      await this.humanEngine.typeHumanLike(line, this.editorSelectors.editor, { click: false });
+
+      if (i < lines.length - 1) {
+        await this.page.keyboard.press('Enter');
+      } else {
+        // End list cleanly: create next (empty) bullet, then backspace to exit list without leaving empty bullets.
+        await this.page.keyboard.press('Enter');
+        await this.page.keyboard.press('Backspace');
+        await this.page.keyboard.press('Enter');
+      }
     }
 
-    // Exit list mode (double enter is reliable in Quill)
-    await editorElement.press('Enter');
-    await this.delayEngine.wait(150);
-    await editorElement.press(shortcut);
     await this.delayEngine.wait(300);
   }
 

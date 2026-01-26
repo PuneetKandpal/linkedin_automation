@@ -10,6 +10,14 @@ import type { AccountDoc } from './db/models/AccountModel';
 import type { ArticleDoc } from './db/models/ArticleModel';
 import { StaticConfigLoader } from './config/static-loader';
 
+type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<unknown>;
+
+function asyncHandler(fn: AsyncHandler) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    void Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
+
 function isHttpUrl(value: unknown): value is string {
   return typeof value === 'string' && /^https?:\/\//i.test(value);
 }
@@ -43,13 +51,13 @@ async function main() {
     return res.json({ ok: true });
   });
 
-  app.get('/accounts', async (req: Request, res: Response) => {
+  app.get('/accounts', asyncHandler(async (req: Request, res: Response) => {
     void req;
     const accounts = await AccountModel.find({}, { storageStateEnc: 0 }).lean();
     return res.json(accounts);
-  });
+  }));
 
-  app.post('/accounts', async (req: Request, res: Response) => {
+  app.post('/accounts', asyncHandler(async (req: Request, res: Response) => {
     const { accountId, displayName, email, timezone, proxy, status } = req.body as Record<string, unknown>;
 
     if (typeof accountId !== 'string' || accountId.trim().length === 0) {
@@ -80,9 +88,9 @@ async function main() {
 
     logger.info('Account created', { accountId: created.accountId });
     return res.status(201).json({ accountId: created.accountId });
-  });
+  }));
 
-  app.patch('/accounts/:accountId', async (req: Request, res: Response) => {
+  app.patch('/accounts/:accountId', asyncHandler(async (req: Request, res: Response) => {
     const { accountId } = req.params;
     if (!accountId) return res.status(400).json({ error: 'Missing accountId' });
 
@@ -133,21 +141,21 @@ async function main() {
     ).lean();
     if (!updated) return res.status(404).json({ error: 'Account not found' });
     return res.json(updated);
-  });
+  }));
 
-  app.get('/accounts/:accountId/issues', async (req: Request, res: Response) => {
+  app.get('/accounts/:accountId/issues', asyncHandler(async (req: Request, res: Response) => {
     const issues = await AccountIssueModel.find({ accountId: req.params.accountId }).sort({ createdAt: -1 }).lean();
     return res.json(issues);
-  });
+  }));
 
-  app.get('/articles', async (req: Request, res: Response) => {
+  app.get('/articles', asyncHandler(async (req: Request, res: Response) => {
     const status = req.query.status as string | undefined;
     const query: Record<string, unknown> = status ? { status } : {};
     const articles = await ArticleModel.find(query).sort({ updatedAt: -1 }).lean();
     return res.json(articles);
-  });
+  }));
 
-  app.post('/articles', async (req: Request, res: Response) => {
+  app.post('/articles', asyncHandler(async (req: Request, res: Response) => {
     const { articleId, language, title, markdownContent, coverImagePath, communityPostText } =
       req.body as Record<string, unknown>;
 
@@ -182,9 +190,9 @@ async function main() {
 
     logger.info('Article created', { articleId: created.articleId });
     return res.status(201).json({ articleId: created.articleId });
-  });
+  }));
 
-  app.patch('/articles/:articleId', async (req: Request, res: Response) => {
+  app.patch('/articles/:articleId', asyncHandler(async (req: Request, res: Response) => {
     const { articleId } = req.params;
     if (!articleId) return res.status(400).json({ error: 'Missing articleId' });
 
@@ -237,9 +245,9 @@ async function main() {
     ).lean();
     if (!updated) return res.status(404).json({ error: 'Article not found' });
     return res.json(updated);
-  });
+  }));
 
-  app.post('/articles/:articleId/ready', async (req: Request, res: Response) => {
+  app.post('/articles/:articleId/ready', asyncHandler(async (req: Request, res: Response) => {
     void req.body;
     const existing = (await ArticleModel.findOne({ articleId: req.params.articleId }).lean()) as ArticleDoc | null;
     if (!existing) return res.status(404).json({ error: 'Article not found' });
@@ -252,16 +260,16 @@ async function main() {
     ).lean();
     if (!updated) return res.status(404).json({ error: 'Article not found' });
     return res.json(updated);
-  });
+  }));
 
-  app.get('/publish-jobs', async (req: Request, res: Response) => {
+  app.get('/publish-jobs', asyncHandler(async (req: Request, res: Response) => {
     const status = req.query.status as string | undefined;
     const query: Record<string, unknown> = status ? { status } : {};
     const jobs = await PublishJobModel.find(query).sort({ runAt: 1 }).lean();
     return res.json(jobs);
-  });
+  }));
 
-  app.post('/publish-jobs', async (req: Request, res: Response) => {
+  app.post('/publish-jobs', asyncHandler(async (req: Request, res: Response) => {
     const { accountId, articleId, runAt, delayProfile, typingProfile, jobId } = req.body as Record<string, unknown>;
 
     if (typeof accountId !== 'string') return res.status(400).json({ error: 'Missing accountId' });
@@ -306,15 +314,24 @@ async function main() {
       ? jobId
       : `job_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-    const created = await PublishJobModel.create({
-      jobId: finalJobId,
-      accountId,
-      articleId,
-      runAt: parsedRunAt,
-      delayProfile: delayKey,
-      typingProfile: typingKey,
-      status: 'pending',
-    });
+    let created;
+    try {
+      created = await PublishJobModel.create({
+        jobId: finalJobId,
+        accountId,
+        articleId,
+        runAt: parsedRunAt,
+        delayProfile: delayKey,
+        typingProfile: typingKey,
+        status: 'pending',
+      });
+    } catch (err) {
+      const e: any = err;
+      if (e && e.code === 11000) {
+        return res.status(409).json({ error: 'jobId already exists', jobId: finalJobId });
+      }
+      throw err;
+    }
 
     await ArticleModel.updateOne(
       { articleId },
@@ -329,9 +346,9 @@ async function main() {
     });
 
     return res.status(201).json({ jobId: created.jobId });
-  });
+  }));
 
-  app.post('/publish-jobs/:jobId/cancel', async (req: Request, res: Response) => {
+  app.post('/publish-jobs/:jobId/cancel', asyncHandler(async (req: Request, res: Response) => {
     void req.body;
     const jobToCancel = await PublishJobModel.findOne({ jobId: req.params.jobId }).lean();
     if (!jobToCancel) return res.status(404).json({ error: 'Job not found' });
@@ -353,7 +370,7 @@ async function main() {
     );
 
     return res.json(job);
-  });
+  }));
 
   app.use((err: unknown, req: Request, res: Response, next: unknown) => {
     void req;

@@ -30,14 +30,17 @@ export class HumanEngine {
     return chars[Math.floor(Math.random() * chars.length)];
   }
 
-  async typeHumanLike(text: string, selector: string): Promise<void> {
+  async typeHumanLike(text: string, selector: string, options?: { click?: boolean }): Promise<void> {
     const element = this.page.locator(selector).first();
-    await element.click();
+    if (options?.click !== false) {
+      await element.click();
+    }
 
     this.logger.info('HumanEngine → typing start', {
       selector,
       charCount: text.length,
       typingProfile: this.typingProfile,
+      click: options?.click !== false,
     });
 
     for (let i = 0; i < text.length; i++) {

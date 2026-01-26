@@ -1,35 +1,37 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useEffect, useState } from 'react';
+import './App.css';
+import { Layout, type TabKey } from './components/layout';
+import { AccountsPage } from './features/accounts/AccountsPage';
+import { ArticlesPage } from './features/articles/ArticlesPage';
+import { JobsPage } from './features/jobs/JobsPage';
+import { HealthApi } from './api/health';
+import type { Health } from './api/types';
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [tab, setTab] = useState<TabKey>('accounts');
+  const [health, setHealth] = useState<Health | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const h = await HealthApi.get();
+        if (mounted) setHealth(h);
+      } catch {
+        if (mounted) setHealth({ ok: false });
+      }
+    }
+    void load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <Layout tab={tab} onTabChange={setTab} health={health}>
+      {tab === 'accounts' ? <AccountsPage /> : null}
+      {tab === 'articles' ? <ArticlesPage /> : null}
+      {tab === 'jobs' ? <JobsPage /> : null}
+    </Layout>
+  );
 }
-
-export default App

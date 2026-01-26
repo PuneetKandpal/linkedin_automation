@@ -37,6 +37,20 @@ export class CaptchaError extends PublisherError {
   }
 }
 
+export class OtpRequiredError extends PublisherError {
+  constructor(message: string, metadata?: Record<string, unknown>) {
+    super(ErrorCode.OTP_REQUIRED, message, metadata);
+    this.name = 'OtpRequiredError';
+  }
+}
+
+export class LoginRedirectError extends PublisherError {
+  constructor(message: string, metadata?: Record<string, unknown>) {
+    super(ErrorCode.LOGIN_REDIRECT, message, metadata);
+    this.name = 'LoginRedirectError';
+  }
+}
+
 export class EditorError extends PublisherError {
   constructor(message: string, metadata?: Record<string, unknown>) {
     super(ErrorCode.EDITOR_NOT_READY, message, metadata);

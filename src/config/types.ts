@@ -25,15 +25,17 @@ export interface Account {
   accountId: string;
   displayName: string;
   email: string;
-  profileDir: string;
+  profileDir?: string;
   proxy?: ProxyConfig;
   timezone: string;
   status: 'active' | 'disabled';
+  storageState?: unknown;
 }
 
 export interface ArticleContentBlock {
   type: 'paragraph' | 'heading' | 'list' | 'quote';
   text: string;
+  listStyle?: 'bullet' | 'ordered';
 }
 
 export interface Article {

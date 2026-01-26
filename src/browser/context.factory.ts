@@ -1,6 +1,4 @@
-import { chromium, BrowserContext } from '@playwright/test';
-import { existsSync, mkdirSync } from 'fs';
-import { resolve } from 'path';
+import { chromium, Browser, BrowserContext } from '@playwright/test';
 import { Account, GlobalConfig } from '../config/types';
 import { Logger } from '../engine/logger';
 
@@ -11,6 +9,7 @@ function isProxyConnectionFailure(err: unknown): boolean {
 
 export class BrowserContextFactory {
   private context: BrowserContext | null = null;
+  private browser: Browser | null = null;
 
   constructor(
     private globalConfig: GlobalConfig,
@@ -20,16 +19,9 @@ export class BrowserContextFactory {
   async createContext(account: Account): Promise<BrowserContext> {
     this.logger.info('Launching browser context', { accountId: account.accountId });
 
-    const userDataDir = resolve(account.profileDir);
-    mkdirSync(userDataDir, { recursive: true });
-
-    const storageStatePath = resolve(userDataDir, 'storageState.json');
-    this.logger.info('Session state', {
-      accountId: account.accountId,
-      profileDir: userDataDir,
-      storageStateExists: existsSync(storageStatePath),
-      storageStatePath,
-    });
+    if (!account.storageState) {
+      throw new Error(`Missing storageState for account: ${account.accountId}`);
+    }
 
     const forceNoProxy = process.env.NO_PROXY === '1' || process.env.NO_PROXY === 'true';
 
@@ -52,20 +44,18 @@ export class BrowserContextFactory {
         };
       }
 
-      const context = await chromium.launchPersistentContext(userDataDir, {
-        ...launchOptions,
+      this.browser = await chromium.launch(launchOptions);
+      const context = await this.browser.newContext({
         viewport: { width: 1920, height: 1080 },
         locale: 'en-US',
         timezoneId: account.timezone,
         permissions: [],
         bypassCSP: false,
+        storageState: account.storageState as any,
       });
 
-      // Quick connectivity check: if proxy is broken we want to fail fast and retry.
-      // We keep this lightweight (domcontentloaded) to avoid slowing normal runs.
       const page = context.pages()[0] || (await context.newPage());
       await page.goto('https://www.linkedin.com/', { waitUntil: 'domcontentloaded', timeout: 15000 });
-
       return context;
     };
 
@@ -91,9 +81,8 @@ export class BrowserContextFactory {
       }
     }
 
-    this.logger.info('Browser context created', { 
+    this.logger.info('Browser context created', {
       accountId: account.accountId,
-      profileDir: userDataDir 
     });
 
     return this.context;
@@ -104,6 +93,11 @@ export class BrowserContextFactory {
       await this.context.close();
       this.logger.info('Browser context closed');
       this.context = null;
+    }
+
+    if (this.browser) {
+      await this.browser.close();
+      this.browser = null;
     }
   }
 

@@ -1,0 +1,7 @@
+{
+  "accountId": "acct_01",
+  "displayName": "Account 01",
+  "email": "acct01@example.com",
+  "timezone": "Asia/Kolkata",
+  "status": "active"
+}

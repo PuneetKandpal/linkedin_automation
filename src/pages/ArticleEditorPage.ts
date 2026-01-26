@@ -280,7 +280,7 @@ export class ArticleEditorPage extends BasePage {
       if (block.type === 'heading') {
         await this.typeHeading(block.text);
       } else if (block.type === 'list') {
-        await this.typeList(block.text);
+        await this.typeList(block.text, block.listStyle);
       } else if (block.type === 'quote') {
         await this.typeQuote(block.text);
       } else {
@@ -301,15 +301,17 @@ export class ArticleEditorPage extends BasePage {
     const editorElement = this.page.locator(this.editorSelectors.editor).first();
     await editorElement.press('Enter');
     await editorElement.press('Enter');
-    
     await this.delayEngine.wait(300);
   }
 
   private async typeHeading(text: string): Promise<void> {
-    // LinkedIn editor supports headings; typing plain text still works even if styling isn't applied.
-    await this.humanEngine.typeHumanLike(text, this.editorSelectors.editor);
-
     const editorElement = this.page.locator(this.editorSelectors.editor).first();
+
+    const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await editorElement.press(`${modifier}+B`);
+    await this.humanEngine.typeHumanLike(text, this.editorSelectors.editor);
+    await editorElement.press(`${modifier}+B`);
+
     await editorElement.press('Enter');
     await editorElement.press('Enter');
     await this.delayEngine.wait(300);
@@ -324,16 +326,37 @@ export class ArticleEditorPage extends BasePage {
     await this.delayEngine.wait(300);
   }
 
-  private async typeList(text: string): Promise<void> {
-    const lines = text.replace(/\r\n/g, '\n').split('\n').map(l => l.trim()).filter(Boolean);
+  private async typeList(text: string, style?: 'bullet' | 'ordered'): Promise<void> {
+    const lines = text
+      .replace(/\r\n/g, '\n')
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean);
+
+    if (lines.length === 0) return;
+
     const editorElement = this.page.locator(this.editorSelectors.editor).first();
+    await editorElement.click();
+
+    // Quill shortcuts (used by LinkedIn article editor):
+    // - Bulleted list: Ctrl/Meta + Shift + 8
+    // - Numbered list: Ctrl/Meta + Shift + 7
+    const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+    const shortcut = style === 'ordered' ? `${modifier}+Shift+7` : `${modifier}+Shift+8`;
+
+    // Enable list mode
+    await editorElement.press(shortcut);
+    await this.delayEngine.wait(150);
 
     for (const line of lines) {
       await this.humanEngine.typeHumanLike(line, this.editorSelectors.editor);
       await editorElement.press('Enter');
     }
 
+    // Exit list mode (double enter is reliable in Quill)
     await editorElement.press('Enter');
+    await this.delayEngine.wait(150);
+    await editorElement.press(shortcut);
     await this.delayEngine.wait(300);
   }
 

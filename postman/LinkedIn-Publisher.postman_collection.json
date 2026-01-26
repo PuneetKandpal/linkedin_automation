@@ -1,0 +1,130 @@
+{
+  "info": {
+    "name": "LinkedIn Publisher API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+      }
+    },
+    {
+      "name": "Accounts",
+      "item": [
+        {
+          "name": "List Accounts",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/accounts", "host": ["{{baseUrl}}"], "path": ["accounts"] }
+          }
+        },
+        {
+          "name": "Create Account",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"{{accountId}}\",\n  \"displayName\": \"Account 01\",\n  \"email\": \"acct01@example.com\",\n  \"timezone\": \"Asia/Kolkata\",\n  \"status\": \"active\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/accounts", "host": ["{{baseUrl}}"], "path": ["accounts"] }
+          }
+        },
+        {
+          "name": "Update Account (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"timezone\": \"Asia/Kolkata\"\n}" },
+            "url": { "raw": "{{baseUrl}}/accounts/{{accountId}}", "host": ["{{baseUrl}}"], "path": ["accounts", "{{accountId}}"] }
+          }
+        },
+        {
+          "name": "List Account Issues",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/accounts/{{accountId}}/issues", "host": ["{{baseUrl}}"], "path": ["accounts", "{{accountId}}", "issues"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Articles",
+      "item": [
+        {
+          "name": "List Articles",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/articles", "host": ["{{baseUrl}}"], "path": ["articles"] }
+          }
+        },
+        {
+          "name": "Create Article",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"articleId\": \"{{articleId}}\",\n  \"language\": \"en\",\n  \"title\": \"Demo Article\",\n  \"markdownContent\": \"This is a demo article.\\n\\n- First bullet\\n- Second bullet\\n\",\n  \"coverImagePath\": \"https://picsum.photos/seed/linkedin/1200/628\",\n  \"communityPostText\": \"Demo community post text\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/articles", "host": ["{{baseUrl}}"], "path": ["articles"] }
+          }
+        },
+        {
+          "name": "Update Article (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Demo Article (Updated)\"\n}" },
+            "url": { "raw": "{{baseUrl}}/articles/{{articleId}}", "host": ["{{baseUrl}}"], "path": ["articles", "{{articleId}}"] }
+          }
+        },
+        {
+          "name": "Mark Article Ready",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{baseUrl}}/articles/{{articleId}}/ready", "host": ["{{baseUrl}}"], "path": ["articles", "{{articleId}}", "ready"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Publish Jobs",
+      "item": [
+        {
+          "name": "List Publish Jobs",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/publish-jobs", "host": ["{{baseUrl}}"], "path": ["publish-jobs"] }
+          }
+        },
+        {
+          "name": "Create Publish Job",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobId\": \"{{jobId}}\",\n  \"accountId\": \"{{accountId}}\",\n  \"articleId\": \"{{articleId}}\",\n  \"runAt\": \"{{runAt}}\",\n  \"delayProfile\": \"default\",\n  \"typingProfile\": \"medium\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/publish-jobs", "host": ["{{baseUrl}}"], "path": ["publish-jobs"] }
+          }
+        },
+        {
+          "name": "Cancel Publish Job",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{baseUrl}}/publish-jobs/{{jobId}}/cancel", "host": ["{{baseUrl}}"], "path": ["publish-jobs", "{{jobId}}", "cancel"] }
+          }
+        }
+      ]
+    }
+  ]
+}

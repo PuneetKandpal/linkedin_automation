@@ -30,12 +30,13 @@ function resolveArticleBlocks(article: { markdownContent?: string; content?: Art
   throw new Error('Article has no markdownContent');
 }
 
-function markdownToBlocks(markdown: string): ArticleContentBlock[] {
+export function markdownToBlocks(markdown: string): ArticleContentBlock[] {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
   const blocks: ArticleContentBlock[] = [];
 
   let paragraph: string[] = [];
   let list: string[] = [];
+  let listStyle: 'bullet' | 'ordered' | null = null;
   let quote: string[] = [];
 
   const flushParagraph = () => {
@@ -48,8 +49,9 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
   const flushList = () => {
     if (list.length === 0) return;
     const text = list.join('\n').trim();
-    if (text) blocks.push({ type: 'list', text });
+    if (text) blocks.push({ type: 'list', text, listStyle: listStyle || 'bullet' });
     list = [];
+    listStyle = null;
   };
 
   const flushQuote = () => {
@@ -90,12 +92,14 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
       continue;
     }
 
-    // headings (treated as normal text; no special handling)
+    // headings
     const headingMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
     if (headingMatch) {
       flushList();
       flushQuote();
-      paragraph.push(headingMatch[2].trim());
+      flushParagraph();
+      const headingText = headingMatch[2].trim();
+      if (headingText) blocks.push({ type: 'heading', text: headingText });
       continue;
     }
 
@@ -114,7 +118,9 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
     const ulMatch = trimmed.match(/^([-*+])\s+(.*)$/);
     if (ulMatch) {
       flushParagraph();
-      list.push(`${ulMatch[1]} ${ulMatch[2].trim()}`);
+      if (listStyle && listStyle !== 'bullet') flushList();
+      listStyle = 'bullet';
+      list.push(ulMatch[2].trim());
       continue;
     }
 
@@ -122,7 +128,9 @@ function markdownToBlocks(markdown: string): ArticleContentBlock[] {
     const olMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
     if (olMatch) {
       flushParagraph();
-      list.push(`${olMatch[1]}. ${olMatch[2].trim()}`);
+      if (listStyle && listStyle !== 'ordered') flushList();
+      listStyle = 'ordered';
+      list.push(olMatch[2].trim());
       continue;
     }
 

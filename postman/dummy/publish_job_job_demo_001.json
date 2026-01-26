@@ -1,0 +1,8 @@
+{
+  "jobId": "job_demo_001",
+  "accountId": "acct_01",
+  "articleId": "art_001",
+  "runAt": "2026-01-01T10:00:00.000Z",
+  "delayProfile": "default",
+  "typingProfile": "medium"
+}

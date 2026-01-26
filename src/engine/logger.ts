@@ -1,5 +1,7 @@
-import { appendFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { mkdirSync, readdirSync, statSync, unlinkSync } from 'fs';
+import { dirname, resolve } from 'path';
+import winston from 'winston';
+import DailyRotateFile from 'winston-daily-rotate-file';
 
 export enum LogLevel {
   DEBUG = 'DEBUG',
@@ -27,14 +29,100 @@ export interface LoggerOptions {
   latestLogPath?: string;
 }
 
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '"[unserializable]"';
+  }
+}
+
+function cleanupOldLogs(logDir: string, retentionDays: number): void {
+  try {
+    const now = Date.now();
+    const maxAgeMs = retentionDays * 24 * 60 * 60 * 1000;
+    const entries = readdirSync(logDir);
+
+    for (const name of entries) {
+      const full = resolve(logDir, name);
+      let st;
+      try {
+        st = statSync(full);
+      } catch {
+        continue;
+      }
+      if (!st.isFile()) continue;
+      if (now - st.mtimeMs > maxAgeMs) {
+        try {
+          unlinkSync(full);
+        } catch {
+          // ignore
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export class Logger {
   private logs: LogEntry[] = [];
   private logFilePath?: string;
   private latestLogPath?: string;
+  private baseLogger: winston.Logger;
 
   constructor(options?: LoggerOptions) {
     this.logFilePath = options?.logFilePath;
     this.latestLogPath = options?.latestLogPath;
+
+    const logDir = resolve('./output/logs');
+    mkdirSync(logDir, { recursive: true });
+
+    const retentionDays = Number(process.env.LOG_RETENTION_DAYS || 15);
+    cleanupOldLogs(logDir, retentionDays);
+
+    const toLine = winston.format.printf((info: winston.Logform.TransformableInfo) => {
+      const meta = (info as any).metadata ? ` ${safeStringify((info as any).metadata)}` : '';
+      return `[${info.timestamp}] [${String(info.level).toUpperCase()}] ${info.message}${meta}`;
+    });
+
+    const transports: winston.transport[] = [
+      new winston.transports.Console({}),
+      new DailyRotateFile({
+        filename: resolve(logDir, 'app-%DATE%.log'),
+        datePattern: 'YYYY-MM-DD',
+        maxFiles: `${retentionDays}d`,
+        zippedArchive: false,
+      }) as unknown as winston.transport,
+    ];
+
+    if (this.logFilePath) {
+      mkdirSync(dirname(this.logFilePath), { recursive: true });
+      transports.push(
+        new winston.transports.File({
+          filename: this.logFilePath,
+        })
+      );
+    }
+
+    if (this.latestLogPath) {
+      mkdirSync(dirname(this.latestLogPath), { recursive: true });
+      transports.push(
+        new winston.transports.File({
+          filename: this.latestLogPath,
+          options: { flags: 'w' },
+        })
+      );
+    }
+
+    this.baseLogger = winston.createLogger({
+      level: (process.env.LOG_LEVEL || 'info').toLowerCase(),
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        toLine
+      ),
+      transports,
+    });
   }
 
   private formatTimestamp(): string {
@@ -50,25 +138,19 @@ export class Logger {
     };
 
     this.logs.push(entry);
-
-    const metaStr = metadata ? ` ${JSON.stringify(metadata)}` : '';
-
-    const line = `[${entry.timestamp}] [${level}] ${message}${metaStr}`;
-    console.log(line);
-
-    if (this.logFilePath || this.latestLogPath) {
-      try {
-        const write = (targetPath: string) => {
-          mkdirSync(dirname(targetPath), { recursive: true });
-          appendFileSync(targetPath, `${line}\n`, 'utf-8');
-        };
-
-        if (this.logFilePath) write(this.logFilePath);
-        if (this.latestLogPath) write(this.latestLogPath);
-      } catch {
-        // Do not fail the run if logging to file fails.
-      }
+    if (this.logs.length > 2000) {
+      this.logs.shift();
     }
+
+    const winstonLevel = level === LogLevel.DEBUG
+      ? 'debug'
+      : level === LogLevel.INFO
+        ? 'info'
+        : level === LogLevel.WARN
+          ? 'warn'
+          : 'error';
+
+    this.baseLogger.log(winstonLevel, message, { metadata });
   }
 
   debug(message: string, metadata?: Record<string, unknown>) {

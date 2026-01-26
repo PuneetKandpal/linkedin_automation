@@ -4,7 +4,7 @@ import { Logger } from '../engine/logger';
 import { HumanEngine } from '../engine/human.engine';
 import { DelayEngine } from '../engine/delay.engine';
 import { Selectors } from '../config/types';
-import { SessionError, CaptchaError } from '../errors/error.types';
+import { CaptchaError, LoginRedirectError, OtpRequiredError } from '../errors/error.types';
 
 export class SessionPage extends BasePage {
   constructor(
@@ -25,7 +25,7 @@ export class SessionPage extends BasePage {
 
     if (this.isLoginPage(currentUrl)) {
       this.logger.error('Redirected to login page - session invalid');
-      throw new SessionError('User not logged in', { url: currentUrl });
+      throw new LoginRedirectError('User not logged in', { url: currentUrl });
     }
 
     if (await this.isCaptchaPresent()) {
@@ -35,7 +35,7 @@ export class SessionPage extends BasePage {
 
     if (await this.isOtpRequired()) {
       this.logger.error('OTP verification required');
-      throw new SessionError('OTP verification required', { url: currentUrl });
+      throw new OtpRequiredError('OTP verification required', { url: currentUrl });
     }
 
     this.logger.info('Session validation passed');

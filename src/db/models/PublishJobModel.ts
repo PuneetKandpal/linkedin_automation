@@ -8,6 +8,8 @@ export interface PublishJobDoc {
   articleId: string;
   delayProfile: string;
   typingProfile: string;
+  companyPageUrl?: string;
+  companyPageName?: string;
   runAt: Date;
   status: PublishJobStatus;
   startedAt?: Date;
@@ -27,6 +29,8 @@ const PublishJobSchema = new mongoose.Schema(
     articleId: { type: String, required: true, index: true },
     delayProfile: { type: String, required: true, default: 'default' },
     typingProfile: { type: String, required: true, default: 'medium' },
+    companyPageUrl: { type: String, required: false },
+    companyPageName: { type: String, required: false },
     runAt: { type: Date, required: true },
     status: {
       type: String,

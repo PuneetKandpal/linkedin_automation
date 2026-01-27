@@ -110,7 +110,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"jobId\": \"{{jobId}}\",\n  \"accountId\": \"{{accountId}}\",\n  \"articleId\": \"{{articleId}}\",\n  \"runAt\": \"{{runAt}}\",\n  \"delayProfile\": \"default\",\n  \"typingProfile\": \"medium\"\n}"
+              "raw": "{\n  \"jobId\": \"{{jobId}}\",\n  \"accountId\": \"{{accountId}}\",\n  \"articleId\": \"{{articleId}}\",\n  \"runAt\": \"{{runAt}}\",\n  \"delayProfile\": \"default\",\n  \"typingProfile\": \"medium\",\n  \"companyPageUrl\": \"https://www.linkedin.com/company/the-growth-signals/\",\n  \"companyPageName\": \"The Growth Signals\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/publish-jobs", "host": ["{{baseUrl}}"], "path": ["publish-jobs"] }
           }

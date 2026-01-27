@@ -31,6 +31,32 @@ export class ArticleEditorPage extends BasePage {
     await this.waitForEditorReady();
   }
 
+  async openNewCompanyPageArticle(params: { companyPageUrl?: string; companyPageName?: string }): Promise<void> {
+    const { companyPageUrl, companyPageName } = params;
+    this.logger.info('Opening company page article editor', { companyPageUrl, companyPageName });
+
+    if (companyPageUrl && companyPageUrl.trim().length > 0) {
+      await this.navigateTo(companyPageUrl.trim());
+    } else if (companyPageName && companyPageName.trim().length > 0) {
+      // Best-effort: LinkedIn sometimes exposes managed pages as direct links in nav.
+      await this.navigateTo('https://www.linkedin.com/feed/');
+      await this.delayEngine.wait(1500);
+      await this.page.getByRole('link', { name: companyPageName.trim(), exact: true }).first().click();
+    } else {
+      throw new Error('Missing companyPageUrl/companyPageName for company page publishing');
+    }
+
+    await this.delayEngine.wait(1500);
+
+    // Codegen path: Page -> Create -> Publish an article
+    await this.page.getByRole('link', { name: /create/i }).first().click();
+    await this.delayEngine.wait(800);
+    await this.page.getByRole('link', { name: /publish an article/i }).first().click();
+
+    await this.delayEngine.beforeEditorFocus();
+    await this.waitForEditorReady();
+  }
+
   async maybeUploadCoverImage(coverImagePath?: string): Promise<void> {
     const selector = this.editorSelectors.coverUploadButton;
     if (!selector) return;

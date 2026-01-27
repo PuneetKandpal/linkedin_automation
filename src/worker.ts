@@ -52,6 +52,8 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
     runAt: job.runAt,
     delayProfile: job.delayProfile,
     typingProfile: job.typingProfile,
+    companyPageUrl: (job as any).companyPageUrl,
+    companyPageName: (job as any).companyPageName,
   });
 
   let account = await AccountModel.findOne({ accountId: job.accountId }).lean();
@@ -151,7 +153,13 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
     await sessionPage.navigateToLinkedIn();
     await sessionPage.ensureLoggedIn();
 
-    await articleEditorPage.openNewArticle();
+    const companyPageUrl = (job as any).companyPageUrl as string | undefined;
+    const companyPageName = (job as any).companyPageName as string | undefined;
+    if ((companyPageUrl && companyPageUrl.trim().length > 0) || (companyPageName && companyPageName.trim().length > 0)) {
+      await articleEditorPage.openNewCompanyPageArticle({ companyPageUrl, companyPageName });
+    } else {
+      await articleEditorPage.openNewArticle();
+    }
 
     const coverUrl = article.coverImagePath;
     if (coverUrl && !/^https?:\/\//i.test(coverUrl)) {

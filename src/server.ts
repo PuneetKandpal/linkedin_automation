@@ -270,7 +270,16 @@ async function main() {
   }));
 
   app.post('/publish-jobs', asyncHandler(async (req: Request, res: Response) => {
-    const { accountId, articleId, runAt, delayProfile, typingProfile, jobId } = req.body as Record<string, unknown>;
+    const {
+      accountId,
+      articleId,
+      runAt,
+      delayProfile,
+      typingProfile,
+      jobId,
+      companyPageUrl,
+      companyPageName,
+    } = req.body as Record<string, unknown>;
 
     if (typeof accountId !== 'string') return res.status(400).json({ error: 'Missing accountId' });
     if (typeof articleId !== 'string') return res.status(400).json({ error: 'Missing articleId' });
@@ -314,6 +323,13 @@ async function main() {
       ? jobId
       : `job_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
+    const finalCompanyPageUrl = typeof companyPageUrl === 'string' && companyPageUrl.trim().length > 0
+      ? companyPageUrl.trim()
+      : undefined;
+    const finalCompanyPageName = typeof companyPageName === 'string' && companyPageName.trim().length > 0
+      ? companyPageName.trim()
+      : undefined;
+
     let created;
     try {
       created = await PublishJobModel.create({
@@ -323,6 +339,8 @@ async function main() {
         runAt: parsedRunAt,
         delayProfile: delayKey,
         typingProfile: typingKey,
+        companyPageUrl: finalCompanyPageUrl,
+        companyPageName: finalCompanyPageName,
         status: 'pending',
       });
     } catch (err) {

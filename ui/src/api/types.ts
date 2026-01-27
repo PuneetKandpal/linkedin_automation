@@ -49,7 +49,7 @@ export type Article = {
   updatedAt?: string;
 };
 
-export type PublishJobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
+export type PublishJobStatus = 'pending' | 'running' | 'success' | 'failed' | 'canceled';
 
 export type PublishJob = {
   jobId: string;
@@ -59,6 +59,11 @@ export type PublishJob = {
   delayProfile: string;
   typingProfile: string;
   status: PublishJobStatus;
+  articleUrl?: string;
+  error?: string;
+  errorCode?: string;
+  errorStep?: string;
+  startedAt?: string;
   createdAt?: string;
   finishedAt?: string;
 };

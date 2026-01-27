@@ -17,7 +17,7 @@ import { ArticleEditorPage } from './pages/ArticleEditorPage';
 import { PublishConfirmPage } from './pages/PublishConfirmPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ErrorCode, PublisherError } from './errors/error.types';
-import { markdownToBlocks } from './runner';
+import { markdownToLinkedInHtml } from './markdown/linkedin';
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolvePromise => setTimeout(resolvePromise, ms));
@@ -166,8 +166,8 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
     );
     await articleEditorPage.typeTitle(article.title);
 
-    const blocks = markdownToBlocks(article.markdownContent);
-    await articleEditorPage.typeContent(blocks);
+    const html = markdownToLinkedInHtml(article.markdownContent);
+    await articleEditorPage.pasteHtmlContent(html);
 
     await publishPage.publish({ communityPostText: article.communityPostText });
 
@@ -214,10 +214,14 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
       metadata = err.metadata;
     }
 
+    const step =
+      (metadata && typeof (metadata as any).step === 'string' ? String((metadata as any).step) : undefined) ||
+      (err && typeof (err as any).name === 'string' ? String((err as any).name) : undefined);
+
     if (job) {
       await PublishJobModel.updateOne(
         { jobId },
-        { $set: { status: 'failed', finishedAt: new Date(), error: msg } }
+        { $set: { status: 'failed', finishedAt: new Date(), error: msg, errorCode: code, errorStep: step } }
       );
 
       await ArticleModel.updateOne(

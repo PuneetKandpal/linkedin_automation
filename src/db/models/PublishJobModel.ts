@@ -14,6 +14,8 @@ export interface PublishJobDoc {
   finishedAt?: Date;
   articleUrl?: string;
   error?: string;
+  errorCode?: string;
+  errorStep?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,6 +39,8 @@ const PublishJobSchema = new mongoose.Schema(
     finishedAt: { type: Date, required: false },
     articleUrl: { type: String, required: false },
     error: { type: String, required: false },
+    errorCode: { type: String, required: false },
+    errorStep: { type: String, required: false },
   } as any,
   { timestamps: true }
 );

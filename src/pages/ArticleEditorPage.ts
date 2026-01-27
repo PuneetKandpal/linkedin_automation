@@ -299,6 +299,53 @@ export class ArticleEditorPage extends BasePage {
     this.logger.info('Content typed successfully');
   }
 
+  async pasteHtmlContent(html: string): Promise<void> {
+    this.logger.info('Pasting rich HTML into article editor', { length: html.length });
+
+    await this.humanEngine.scrollToElement(this.editorSelectors.editor);
+    await this.delayEngine.wait(800);
+
+    const editorElement = this.page.locator(this.editorSelectors.editor).first();
+    await editorElement.click();
+    await this.delayEngine.wait(150);
+
+    await editorElement.evaluate((el, richHtml) => {
+      const doc = (globalThis as any).document as any;
+      const win = (globalThis as any).window as any;
+
+      if (!doc) throw new Error('Document not available');
+      if (!el) throw new Error('Editor element not available');
+
+      (el as any).focus?.();
+
+      // Ensure selection is inside the editor before inserting.
+      try {
+        if (doc.createRange && win && win.getSelection) {
+          const range = doc.createRange();
+          range.selectNodeContents(el);
+          const sel = win.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      } catch {
+        // ignore
+      }
+
+      // Clear selected content then insert rich HTML.
+      doc.execCommand('delete');
+      doc.execCommand('insertHTML', false, richHtml);
+    }, html);
+
+    await this.delayEngine.wait(300);
+
+    const ok = await this.verifyContentPresent();
+    if (!ok) {
+      throw new EditorError('Failed to paste content into editor');
+    }
+
+    this.logger.info('Rich HTML pasted successfully');
+  }
+
   private async typeParagraph(text: string): Promise<void> {
     await this.humanEngine.typeHumanLike(text, this.editorSelectors.editor, { click: false });
     

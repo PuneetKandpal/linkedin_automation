@@ -33,7 +33,7 @@ export interface Account {
 }
 
 export interface ArticleContentBlock {
-  type: 'paragraph' | 'heading' | 'list' | 'quote';
+  type: 'paragraph' | 'heading' | 'list' | 'quote' | 'code' | 'hr';
   text: string;
   listStyle?: 'bullet' | 'ordered';
 }

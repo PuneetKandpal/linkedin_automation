@@ -1,22 +1,36 @@
-function randomPart(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID().replace(/-/g, '').slice(0, 10);
+const ALPHANUM = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+function randomChars(length: number): string {
+  if (length <= 0) return '';
+  if (typeof crypto !== 'undefined' && 'getRandomValues' in crypto) {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 1) {
+      out += ALPHANUM[bytes[i] % ALPHANUM.length];
+    }
+    return out;
   }
-  return Math.random().toString(36).slice(2, 12);
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    out += ALPHANUM[Math.floor(Math.random() * ALPHANUM.length)];
+  }
+  return out;
 }
 
 export function generateId(prefix: string): string {
-  return `${prefix}_${randomPart()}`;
+  const p = prefix.toUpperCase().slice(0, 3);
+  return `${p}${randomChars(7)}`;
 }
 
 export function generateAccountId(): string {
-  return generateId('acct');
+  return generateId('ACT');
 }
 
 export function generateArticleId(): string {
-  return generateId('art');
+  return generateId('ART');
 }
 
 export function generateJobId(): string {
-  return generateId('job');
+  return generateId('PBJ');
 }

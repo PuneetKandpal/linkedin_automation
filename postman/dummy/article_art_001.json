@@ -1,8 +1,8 @@
 {
-  "articleId": "art_001",
+  "articleId": "ARTJQ2AZZ4",
   "language": "en",
-  "title": "Demo Article",
-  "markdownContent": "This is a demo article.\n\n- First bullet\n- Second bullet\n\nThis is a second paragraph.",
+  "title": "AI Agents: From Helpers to Executors",
+  "markdownContent": "Artificial Intelligence is no longer just an assistive tool — **AI agents are now capable of executing complete workflows autonomously**.\n\n> \"The shift from AI as a helper to AI as an executor marks one of the biggest paradigm changes in software since the rise of SaaS.\"\n\nFrom **content generation** and **data analysis** to **customer support** and **DevOps automation**, AI agents are reshaping how modern software is built and operated.\n\nExamples you might recognize:\n\n- Autonomous coding and debugging with tools like [GitHub Copilot](https://github.com/features/copilot)\n- Workflow orchestration using agent frameworks such as [LangChain](https://www.langchain.com/) and [Auto-GPT](https://github.com/Significant-Gravitas/Auto-GPT)\n- AI-driven infrastructure automation inspired by platforms like [AWS Bedrock](https://aws.amazon.com/bedrock/) and [OpenAI](https://openai.com/)\n\n---\n\n### Key Impacts of AI Agents\n\n- **Automating repetitive and operational tasks end-to-end**, without constant human intervention\n- **Reducing dependency on complex dashboards and manual configuration**, traditionally required by SaaS tools\n- **Enabling faster decision-making** using real-time context, memory, and reasoning\n- **Allowing teams to focus on strategy instead of execution**\n\n> \"Where SaaS optimized workflows for humans, AI agents optimize workflows for outcomes.\"\n\nThe future of software isn’t more features — it’s fewer clicks.",
   "coverImagePath": "https://picsum.photos/seed/linkedin/1200/628",
-  "communityPostText": "Demo community post text"
+  "communityPostText": "Posting this as a community note: the future is fewer clicks."
 }

@@ -1,5 +1,5 @@
 import { apiFetchJson } from './http';
-import type { Account, AccountIssue } from './types';
+import type { Account, AccountIssue, CompanyPage } from './types';
 
 export type CreateAccountInput = {
   accountId: string;
@@ -28,4 +28,19 @@ export const AccountsApi = {
 
   issues: (accountId: string) =>
     apiFetchJson<AccountIssue[]>(`/accounts/${encodeURIComponent(accountId)}/issues`),
+
+  listCompanyPages: (accountId: string) =>
+    apiFetchJson<CompanyPage[]>(`/accounts/${encodeURIComponent(accountId)}/company-pages`),
+
+  addCompanyPage: (accountId: string, input: { pageId?: string; name: string; url: string }) =>
+    apiFetchJson<{ pageId: string }>(`/accounts/${encodeURIComponent(accountId)}/company-pages`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  deleteCompanyPage: (accountId: string, pageId: string) =>
+    apiFetchJson<{ ok: boolean }>(
+      `/accounts/${encodeURIComponent(accountId)}/company-pages/${encodeURIComponent(pageId)}`,
+      { method: 'DELETE' }
+    ),
 };

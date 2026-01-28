@@ -1,10 +1,17 @@
 export type AccountStatus = 'active' | 'disabled';
-export type AccountAuthStatus = 'unknown' | 'valid' | 'invalid';
+export type AccountAuthStatus = 'unknown' | 'valid' | 'needs_reauth';
+export type AccountLinkStatus = 'unlinked' | 'linked';
 
 export type ProxyConfig = {
   server: string;
   username?: string;
   password?: string;
+};
+
+export type CompanyPage = {
+  pageId: string;
+  name: string;
+  url: string;
 };
 
 export type Account = {
@@ -13,9 +20,11 @@ export type Account = {
   email: string;
   timezone: string;
   status: AccountStatus;
+  linkStatus?: AccountLinkStatus;
   authStatus?: AccountAuthStatus;
   lastAuthError?: string;
   proxy?: ProxyConfig;
+  companyPages?: CompanyPage[];
   storageStateUpdatedAt?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -58,6 +67,8 @@ export type PublishJob = {
   runAt: string;
   delayProfile: string;
   typingProfile: string;
+  companyPageUrl?: string;
+  companyPageName?: string;
   status: PublishJobStatus;
   articleUrl?: string;
   error?: string;

@@ -240,6 +240,7 @@ async function main() {
           storageStateEnc,
           storageStateUpdatedAt: new Date(),
           authStatus: 'valid',
+          linkStatus: 'linked',
           lastAuthError: undefined,
         },
       },

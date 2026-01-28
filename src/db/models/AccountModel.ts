@@ -2,6 +2,13 @@ import mongoose from 'mongoose';
 
 export type AccountStatus = 'active' | 'disabled';
 export type AuthStatus = 'unknown' | 'valid' | 'needs_reauth';
+export type LinkStatus = 'unlinked' | 'linked';
+
+export type CompanyPage = {
+  pageId: string;
+  name: string;
+  url: string;
+};
 
 export interface AccountDoc {
   accountId: string;
@@ -9,11 +16,13 @@ export interface AccountDoc {
   email: string;
   timezone: string;
   status: AccountStatus;
+  linkStatus: LinkStatus;
   proxy?: {
     server: string;
     username?: string;
     password?: string;
   };
+  companyPages?: CompanyPage[];
   authStatus: AuthStatus;
   storageStateEnc?: string;
   storageStateUpdatedAt?: Date;
@@ -33,6 +42,15 @@ const ProxySchema = new SchemaAny(
   { _id: false }
 );
 
+const CompanyPageSchema = new SchemaAny(
+  {
+    pageId: { type: String, required: true },
+    name: { type: String, required: true },
+    url: { type: String, required: true },
+  },
+  { _id: false }
+);
+
 const AccountSchema = new SchemaAny(
   {
     accountId: { type: String, required: true, unique: true, index: true },
@@ -40,7 +58,9 @@ const AccountSchema = new SchemaAny(
     email: { type: String, required: true },
     timezone: { type: String, required: true },
     status: { type: String, required: true, enum: ['active', 'disabled'], default: 'active' },
+    linkStatus: { type: String, required: true, enum: ['unlinked', 'linked'], default: 'unlinked' },
     proxy: { type: ProxySchema as any, required: false },
+    companyPages: { type: [CompanyPageSchema as any], required: false, default: [] },
     authStatus: {
       type: String,
       required: true,

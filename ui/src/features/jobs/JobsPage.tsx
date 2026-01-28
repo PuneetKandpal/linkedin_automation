@@ -37,6 +37,12 @@ export function JobsPage() {
   const [runAtLocal, setRunAtLocal] = useState(() => defaultLocalDateTime(10));
   const [delayProfile, setDelayProfile] = useState('default');
   const [typingProfile, setTypingProfile] = useState('medium');
+  const [companyPageUrl, setCompanyPageUrl] = useState('');
+
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkJson, setBulkJson] = useState('');
+  const [bulkMinGapAccount, setBulkMinGapAccount] = useState(20);
+  const [bulkMinGapCompany, setBulkMinGapCompany] = useState(60);
 
   const [touched, setTouched] = useState<{ [k: string]: boolean }>({});
 
@@ -58,11 +64,47 @@ export function JobsPage() {
     }
   }, []);
 
+  async function submitBulk() {
+    setError(null);
+    setSuccess(null);
+    try {
+      const parsed = JSON.parse(bulkJson || '{}') as any;
+      const items = Array.isArray(parsed.items) ? parsed.items : (Array.isArray(parsed.jobs) ? parsed.jobs : null);
+      if (!items) {
+        setError('Bulk JSON must include items: []');
+        return;
+      }
+
+      await JobsApi.bulk({
+        schedulePolicy: {
+          minGapMinutesPerAccount: bulkMinGapAccount,
+          minGapMinutesPerCompanyPage: bulkMinGapCompany,
+        },
+        items,
+      });
+      await refreshAll();
+      setBulkOpen(false);
+      setSuccess('Bulk jobs scheduled');
+    } catch (e) {
+      setError((e as ApiError).message || String(e));
+    }
+  }
+
   useEffect(() => {
     void refreshAll();
   }, [refreshAll]);
 
   const accountOptions = useMemo(() => accounts.filter(a => a.status === 'active'), [accounts]);
+
+  const selectedAccount = useMemo(
+    () => accounts.find(a => a.accountId === accountId) || null,
+    [accounts, accountId]
+  );
+
+  const companyPageOptions = useMemo(() => {
+    const pages = selectedAccount?.companyPages || [];
+    return pages;
+  }, [selectedAccount]);
 
   const articleOptions = useMemo(
     () => articles.filter(a => a.status !== 'published'),
@@ -75,8 +117,9 @@ export function JobsPage() {
     if (!accountId) e.accountId = 'Select an account';
     if (!articleId) e.articleId = 'Select an article';
     if (!runAtLocal) e.runAtLocal = 'Run At is required';
+    if (!companyPageUrl) e.companyPageUrl = 'Select a company page';
     return e;
-  }, [accountId, articleId, jobId, runAtLocal]);
+  }, [accountId, articleId, jobId, runAtLocal, companyPageUrl]);
 
   const canSubmit = Object.keys(formErrors).length === 0;
 
@@ -85,10 +128,20 @@ export function JobsPage() {
     setRunAtLocal(defaultLocalDateTime(10));
     setDelayProfile('default');
     setTypingProfile('medium');
+    setCompanyPageUrl('');
     setTouched({});
     setError(null);
     setSuccess(null);
     setScheduleOpen(true);
+  }
+
+  function openBulk() {
+    setError(null);
+    setSuccess(null);
+    setBulkJson('');
+    setBulkMinGapAccount(20);
+    setBulkMinGapCompany(60);
+    setBulkOpen(true);
   }
 
   async function createJob() {
@@ -104,6 +157,7 @@ export function JobsPage() {
         runAt: toIsoFromLocal(runAtLocal),
         delayProfile,
         typingProfile,
+        companyPageUrl,
       });
       setJobId(generateJobId());
       await refreshAll();
@@ -170,37 +224,28 @@ export function JobsPage() {
                         j.status === 'success'
                           ? 'ok'
                           : j.status === 'failed'
-                          ? 'danger'
-                          : j.status === 'running'
-                          ? 'warn'
-                          : 'neutral'
+                            ? 'danger'
+                            : j.status === 'running'
+                              ? 'warn'
+                              : 'neutral'
                       }
                       text={j.status}
                     />
                   </td>
-                  <td>
-                    <div className="row">
-                      {j.status === 'pending' ? (
-                        <Button variant="danger" onClick={() => void cancelJob(j.jobId)}>
-                          Cancel
-                        </Button>
-                      ) : null}
-                      {j.status === 'failed' && (j.error || j.errorCode || j.errorStep) ? (
-                        <Button variant="ghost" onClick={() => openFailure(j)}>
-                          View failure
-                        </Button>
-                      ) : null}
-                    </div>
+                  <td className="row">
+                    {j.status === 'failed' ? (
+                      <Button variant="ghost" onClick={() => openFailure(j)}>
+                        View
+                      </Button>
+                    ) : null}
+                    {j.status === 'pending' ? (
+                      <Button variant="ghost" onClick={() => void cancelJob(j.jobId)}>
+                        Cancel
+                      </Button>
+                    ) : null}
                   </td>
                 </tr>
               ))}
-              {jobs.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="muted">
-                    No jobs
-                  </td>
-                </tr>
-              ) : null}
             </tbody>
           </table>
         </div>
@@ -209,12 +254,17 @@ export function JobsPage() {
       <Card
         title="Schedule"
         right={
-          <Button variant="primary" onClick={openSchedule}>
-            Schedule job
-          </Button>
+          <div className="row">
+            <Button variant="primary" onClick={openSchedule}>
+              Schedule
+            </Button>
+            <Button variant="ghost" onClick={openBulk}>
+              Bulk schedule (JSON)
+            </Button>
+          </div>
         }
       >
-        <Note text="Jobs can only be scheduled for ready articles and authenticated active accounts." />
+        <Note text="Scheduling requires the selected account to be linked (bootstrap) and the company page to be added under that account." />
       </Card>
 
       <Modal
@@ -233,7 +283,7 @@ export function JobsPage() {
         }
       >
         {error ? <InlineError message={error} /> : null}
-        <div className="form">
+        <div className="form twoCols">
           <Field label="Job ID" error={touched.jobId ? formErrors.jobId : undefined}>
             <div className="inputWithButton">
               <input
@@ -246,13 +296,14 @@ export function JobsPage() {
               </Button>
             </div>
           </Field>
+
           <Field label="Account" error={touched.accountId ? formErrors.accountId : undefined}>
             <select
               value={accountId}
               onChange={e => setAccountId(e.target.value)}
               onBlur={() => setTouched(t => ({ ...t, accountId: true }))}
             >
-              <option value="">Select account…</option>
+              <option value="">Select…</option>
               {accountOptions.map(a => (
                 <option key={a.accountId} value={a.accountId}>
                   {a.displayName} ({a.accountId})
@@ -260,6 +311,22 @@ export function JobsPage() {
               ))}
             </select>
           </Field>
+
+          <Field label="Company page" error={touched.companyPageUrl ? formErrors.companyPageUrl : undefined}>
+            <select
+              value={companyPageUrl}
+              onChange={e => setCompanyPageUrl(e.target.value)}
+              onBlur={() => setTouched(t => ({ ...t, companyPageUrl: true }))}
+            >
+              <option value="">Select…</option>
+              {companyPageOptions.map(p => (
+                <option key={p.pageId} value={p.url}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
           <Field label="Article" error={touched.articleId ? formErrors.articleId : undefined}>
             <select
               value={articleId}
@@ -274,6 +341,7 @@ export function JobsPage() {
               ))}
             </select>
           </Field>
+
           <Field label="Run At" error={touched.runAtLocal ? formErrors.runAtLocal : undefined}>
             <input
               type="datetime-local"
@@ -282,12 +350,56 @@ export function JobsPage() {
               onBlur={() => setTouched(t => ({ ...t, runAtLocal: true }))}
             />
           </Field>
+
           <Field label="Delay Profile">
             <input value={delayProfile} onChange={e => setDelayProfile(e.target.value)} />
           </Field>
           <Field label="Typing Profile">
             <input value={typingProfile} onChange={e => setTypingProfile(e.target.value)} />
           </Field>
+        </div>
+      </Modal>
+
+      <Modal
+        open={bulkOpen}
+        title="Bulk Schedule (JSON)"
+        onClose={() => setBulkOpen(false)}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setBulkOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void submitBulk()}>
+              Schedule jobs
+            </Button>
+          </>
+        }
+      >
+        {error ? <InlineError message={error} /> : null}
+        <div className="form">
+          <Field label="Min gap minutes per account">
+            <input
+              type="number"
+              value={bulkMinGapAccount}
+              onChange={e => setBulkMinGapAccount(Number(e.target.value))}
+            />
+          </Field>
+          <Field label="Min gap minutes per company page">
+            <input
+              type="number"
+              value={bulkMinGapCompany}
+              onChange={e => setBulkMinGapCompany(Number(e.target.value))}
+            />
+          </Field>
+          <Field label="JSON payload (must include items: [])">
+            <textarea
+              value={bulkJson}
+              onChange={e => setBulkJson(e.target.value)}
+              rows={10}
+              placeholder='{"items": [{"accountId":"acct_004","articleId":"art_0010","runAt":"2026-01-01T10:00:00.000Z","companyPageUrl":"https://www.linkedin.com/company/the-growth-signals/"}]}'
+            />
+          </Field>
+          <Note text="Excel upload will be added later by converting rows into this same JSON format." />
         </div>
       </Modal>
 

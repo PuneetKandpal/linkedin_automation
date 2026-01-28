@@ -34,6 +34,44 @@
           }
         },
         {
+          "name": "Create Accounts (Bulk)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"accountId\": \"acct_004\",\n      \"displayName\": \"Account 04\",\n      \"email\": \"acct04@example.com\",\n      \"timezone\": \"Asia/Kolkata\",\n      \"status\": \"active\"\n    },\n    {\n      \"accountId\": \"acct_005\",\n      \"displayName\": \"Account 05\",\n      \"email\": \"acct05@example.com\",\n      \"timezone\": \"Asia/Kolkata\",\n      \"status\": \"active\"\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/accounts/bulk", "host": ["{{baseUrl}}"], "path": ["accounts", "bulk"] }
+          }
+        },
+        {
+          "name": "List Company Pages (Account)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/accounts/{{accountId}}/company-pages", "host": ["{{baseUrl}}"], "path": ["accounts", "{{accountId}}", "company-pages"] }
+          }
+        },
+        {
+          "name": "Add Company Page (Account)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pageId\": \"page_growth_signals\",\n  \"name\": \"The Growth Signals\",\n  \"url\": \"https://www.linkedin.com/company/the-growth-signals/\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/accounts/{{accountId}}/company-pages", "host": ["{{baseUrl}}"], "path": ["accounts", "{{accountId}}", "company-pages"] }
+          }
+        },
+        {
+          "name": "Delete Company Page (Account)",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/accounts/{{accountId}}/company-pages/{{pageId}}", "host": ["{{baseUrl}}"], "path": ["accounts", "{{accountId}}", "company-pages", "{{pageId}}"] }
+          }
+        },
+        {
           "name": "Update Account (PATCH)",
           "request": {
             "method": "PATCH",
@@ -74,6 +112,18 @@
           }
         },
         {
+          "name": "Create Articles (Bulk)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"articleId\": \"art_0010\",\n      \"language\": \"en\",\n      \"title\": \"Bulk Article 10\",\n      \"markdownContent\": \"# Bulk Article 10\\n\\nThis is a bulk created article.\",\n      \"coverImagePath\": \"https://picsum.photos/seed/linkedin/1200/628\"\n    },\n    {\n      \"articleId\": \"art_0011\",\n      \"language\": \"en\",\n      \"title\": \"Bulk Article 11\",\n      \"markdownContent\": \"# Bulk Article 11\\n\\nThis is a bulk created article.\",\n      \"coverImagePath\": \"https://picsum.photos/seed/linkedin/1200/628\"\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/articles/bulk", "host": ["{{baseUrl}}"], "path": ["articles", "bulk"] }
+          }
+        },
+        {
           "name": "Update Article (PATCH)",
           "request": {
             "method": "PATCH",
@@ -89,6 +139,18 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": { "mode": "raw", "raw": "{}" },
             "url": { "raw": "{{baseUrl}}/articles/{{articleId}}/ready", "host": ["{{baseUrl}}"], "path": ["articles", "{{articleId}}", "ready"] }
+          }
+        },
+        {
+          "name": "Mark Articles Ready (Bulk)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"articleIds\": [\n    \"art_0010\",\n    \"art_0011\"\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/articles/ready/bulk", "host": ["{{baseUrl}}"], "path": ["articles", "ready", "bulk"] }
           }
         }
       ]
@@ -110,9 +172,21 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"jobId\": \"{{jobId}}\",\n  \"accountId\": \"{{accountId}}\",\n  \"articleId\": \"{{articleId}}\",\n  \"runAt\": \"{{runAt}}\",\n  \"delayProfile\": \"default\",\n  \"typingProfile\": \"medium\",\n  \"companyPageUrl\": \"https://www.linkedin.com/company/the-growth-signals/\",\n  \"companyPageName\": \"The Growth Signals\"\n}"
+              "raw": "{\n  \"jobId\": \"{{jobId}}\",\n  \"accountId\": \"{{accountId}}\",\n  \"articleId\": \"{{articleId}}\",\n  \"runAt\": \"{{runAt}}\",\n  \"delayProfile\": \"default\",\n  \"typingProfile\": \"medium\",\n  \"companyPageUrl\": \"https://www.linkedin.com/company/the-growth-signals/\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/publish-jobs", "host": ["{{baseUrl}}"], "path": ["publish-jobs"] }
+          }
+        },
+        {
+          "name": "Create Publish Jobs (Bulk w/ Spacing)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"schedulePolicy\": {\n    \"minGapMinutesPerAccount\": 20,\n    \"minGapMinutesPerCompanyPage\": 60\n  },\n  \"items\": [\n    {\n      \"jobId\": \"job_bulk_001\",\n      \"accountId\": \"acct_004\",\n      \"articleId\": \"art_0010\",\n      \"runAt\": \"2026-01-01T10:00:00.000Z\",\n      \"delayProfile\": \"default\",\n      \"typingProfile\": \"medium\",\n      \"companyPageUrl\": \"https://www.linkedin.com/company/the-growth-signals/\"\n    },\n    {\n      \"jobId\": \"job_bulk_002\",\n      \"accountId\": \"acct_005\",\n      \"articleId\": \"art_0011\",\n      \"runAt\": \"2026-01-01T10:00:00.000Z\",\n      \"delayProfile\": \"default\",\n      \"typingProfile\": \"medium\",\n      \"companyPageUrl\": \"https://www.linkedin.com/company/the-growth-signals/\"\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/publish-jobs/bulk", "host": ["{{baseUrl}}"], "path": ["publish-jobs", "bulk"] }
           }
         },
         {

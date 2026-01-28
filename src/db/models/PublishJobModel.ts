@@ -10,6 +10,11 @@ export interface PublishJobDoc {
   typingProfile: string;
   companyPageUrl?: string;
   companyPageName?: string;
+  requestedRunAt?: Date;
+  schedulePolicy?: {
+    minGapMinutesPerAccount?: number;
+    minGapMinutesPerCompanyPage?: number;
+  };
   runAt: Date;
   status: PublishJobStatus;
   startedAt?: Date;
@@ -31,6 +36,15 @@ const PublishJobSchema = new mongoose.Schema(
     typingProfile: { type: String, required: true, default: 'medium' },
     companyPageUrl: { type: String, required: false },
     companyPageName: { type: String, required: false },
+    requestedRunAt: { type: Date, required: false },
+    schedulePolicy: {
+      type: {
+        minGapMinutesPerAccount: { type: Number, required: false },
+        minGapMinutesPerCompanyPage: { type: Number, required: false },
+      },
+      required: false,
+      _id: false,
+    },
     runAt: { type: Date, required: true },
     status: {
       type: String,

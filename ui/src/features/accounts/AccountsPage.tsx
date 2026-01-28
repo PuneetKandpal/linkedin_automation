@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ApiError } from '../../api/http';
 import { AccountsApi } from '../../api/accounts';
-import type { Account, AccountIssue } from '../../api/types';
+import type { Account, AccountIssue, CompanyPage } from '../../api/types';
 import { generateAccountId } from '../../utils/id';
 import { Badge, Button, Card, Field, InlineError, Modal, Note } from '../../components/ui';
 
@@ -29,6 +29,12 @@ export function AccountsPage() {
 
   const [issues, setIssues] = useState<AccountIssue[]>([]);
   const [issuesError, setIssuesError] = useState<string | null>(null);
+
+  const [companyPages, setCompanyPages] = useState<CompanyPage[]>([]);
+  const [companyPagesError, setCompanyPagesError] = useState<string | null>(null);
+  const [companyPagesLoading, setCompanyPagesLoading] = useState(false);
+  const [companyPageName, setCompanyPageName] = useState('');
+  const [companyPageUrl, setCompanyPageUrl] = useState('');
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -73,7 +79,7 @@ export function AccountsPage() {
     const active = accounts.filter(a => a.status === 'active').length;
     const disabled = accounts.filter(a => a.status === 'disabled').length;
     const authValid = accounts.filter(a => a.authStatus === 'valid').length;
-    const authAttention = accounts.filter(a => a.authStatus === 'invalid' || a.authStatus === 'unknown').length;
+    const authAttention = accounts.filter(a => a.authStatus === 'needs_reauth' || a.authStatus === 'unknown').length;
     return { total, active, disabled, authValid, authAttention };
   }, [accounts]);
 
@@ -136,6 +142,53 @@ export function AccountsPage() {
     }
     void loadIssues();
   }, [selectedAccountId]);
+
+  useEffect(() => {
+    async function loadCompanyPages() {
+      if (!selectedAccountId) {
+        setCompanyPages([]);
+        setCompanyPagesError(null);
+        return;
+      }
+      setCompanyPagesLoading(true);
+      setCompanyPagesError(null);
+      try {
+        const pages = await AccountsApi.listCompanyPages(selectedAccountId);
+        setCompanyPages(pages);
+      } catch (e) {
+        setCompanyPagesError((e as ApiError).message || String(e));
+      } finally {
+        setCompanyPagesLoading(false);
+      }
+    }
+    void loadCompanyPages();
+  }, [selectedAccountId]);
+
+  async function addCompanyPage() {
+    if (!selectedAccountId) return;
+    setCompanyPagesError(null);
+    try {
+      await AccountsApi.addCompanyPage(selectedAccountId, { name: companyPageName, url: companyPageUrl });
+      setCompanyPageName('');
+      setCompanyPageUrl('');
+      const pages = await AccountsApi.listCompanyPages(selectedAccountId);
+      setCompanyPages(pages);
+    } catch (e) {
+      setCompanyPagesError((e as ApiError).message || String(e));
+    }
+  }
+
+  async function removeCompanyPage(pageId: string) {
+    if (!selectedAccountId) return;
+    setCompanyPagesError(null);
+    try {
+      await AccountsApi.deleteCompanyPage(selectedAccountId, pageId);
+      const pages = await AccountsApi.listCompanyPages(selectedAccountId);
+      setCompanyPages(pages);
+    } catch (e) {
+      setCompanyPagesError((e as ApiError).message || String(e));
+    }
+  }
 
   async function createAccount() {
     setError(null);
@@ -281,20 +334,21 @@ export function AccountsPage() {
                     <th>Email</th>
                     <th>Timezone</th>
                     <th>Status</th>
+                    <th>Link</th>
                     <th>Auth</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="muted">
+                      <td colSpan={6} className="muted">
                         Loading accounts…
                       </td>
                     </tr>
                   ) : null}
                   {!loading && filteredAccounts.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="muted">
+                      <td colSpan={6} className="muted">
                         No accounts match the filters
                       </td>
                     </tr>
@@ -316,7 +370,13 @@ export function AccountsPage() {
                       </td>
                       <td>
                         <Badge
-                          tone={a.authStatus === 'valid' ? 'ok' : a.authStatus === 'invalid' ? 'danger' : 'neutral'}
+                          tone={a.linkStatus === 'linked' ? 'ok' : 'neutral'}
+                          text={a.linkStatus || 'unlinked'}
+                        />
+                      </td>
+                      <td>
+                        <Badge
+                          tone={a.authStatus === 'valid' ? 'ok' : a.authStatus === 'needs_reauth' ? 'danger' : 'neutral'}
                           text={a.authStatus || 'unknown'}
                         />
                       </td>
@@ -337,8 +397,9 @@ export function AccountsPage() {
                   </div>
                   <div className="row">
                     <Badge tone={selectedAccount.status === 'active' ? 'ok' : 'warn'} text={selectedAccount.status} />
+                    <Badge tone={selectedAccount.linkStatus === 'linked' ? 'ok' : 'neutral'} text={selectedAccount.linkStatus || 'unlinked'} />
                     <Badge
-                      tone={selectedAccount.authStatus === 'valid' ? 'ok' : selectedAccount.authStatus === 'invalid' ? 'danger' : 'neutral'}
+                      tone={selectedAccount.authStatus === 'valid' ? 'ok' : selectedAccount.authStatus === 'needs_reauth' ? 'danger' : 'neutral'}
                       text={selectedAccount.authStatus || 'unknown'}
                     />
                   </div>
@@ -374,6 +435,45 @@ export function AccountsPage() {
                   >
                     {selectedAccount.status === 'active' ? 'Disable account' : 'Activate account'}
                   </Button>
+                </div>
+
+                <div className="detailSection">
+                  <div className="detailLabel">Company pages</div>
+                  {companyPagesError ? <InlineError message={companyPagesError} /> : null}
+                  {companyPagesLoading ? <div className="muted">Loading company pages…</div> : null}
+                  {!companyPagesLoading && companyPages.length === 0 ? (
+                    <div className="muted">No company pages added</div>
+                  ) : null}
+                  {!companyPagesLoading && companyPages.length > 0 ? (
+                    <ul className="list">
+                      {companyPages.map(p => (
+                        <li key={p.pageId} className="listItem">
+                          <div className="row" style={{ justifyContent: 'space-between' }}>
+                            <div>
+                              <div className="strong">{p.name}</div>
+                              <div className="muted">{p.url}</div>
+                            </div>
+                            <Button variant="ghost" onClick={() => void removeCompanyPage(p.pageId)}>
+                              Remove
+                            </Button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+
+                  <div className="form" style={{ marginTop: 12 }}>
+                    <Field label="Company page name">
+                      <input value={companyPageName} onChange={e => setCompanyPageName(e.target.value)} />
+                    </Field>
+                    <Field label="Company page URL">
+                      <input value={companyPageUrl} onChange={e => setCompanyPageUrl(e.target.value)} placeholder="https://www.linkedin.com/company/your-page/" />
+                    </Field>
+                    <Button variant="primary" onClick={() => void addCompanyPage()} disabled={!companyPageName.trim() || !companyPageUrl.trim()}>
+                      Add company page
+                    </Button>
+                    <Note text="Company pages must be added per account. Scheduling will fail if the page is not linked to the chosen account." />
+                  </div>
                 </div>
 
                 <div className="detailSection">

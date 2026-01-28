@@ -22,6 +22,47 @@ function isHttpUrl(value: unknown): value is string {
   return typeof value === 'string' && /^https?:\/\//i.test(value);
 }
 
+function normalizeCompanyPageUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const v = value.trim();
+  if (!/^https?:\/\//i.test(v)) return undefined;
+  return v.replace(/\/+$/, '');
+}
+
+function normalizeText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const v = value.trim();
+  return v.length > 0 ? v : undefined;
+}
+
+function accountHasCompanyPage(account: AccountDoc, params: { companyPageUrl?: string; companyPageName?: string }): boolean {
+  const url = normalizeCompanyPageUrl(params.companyPageUrl);
+  const name = normalizeText(params.companyPageName);
+  if (!url && !name) return true;
+  const pages = (account as any).companyPages as Array<{ url?: string; name?: string }> | undefined;
+  if (!pages || pages.length === 0) return false;
+  return pages.some(p => {
+    const pUrl = normalizeCompanyPageUrl(p.url);
+    const pName = normalizeText(p.name);
+    if (url && pUrl && pUrl.toLowerCase() === url.toLowerCase()) return true;
+    if (name && pName && pName.toLowerCase() === name.toLowerCase()) return true;
+    return false;
+  });
+}
+
+function companyPageKeyFrom(job: { companyPageUrl?: string; companyPageName?: string }): string | undefined {
+  const url = typeof job.companyPageUrl === 'string' ? job.companyPageUrl.trim() : '';
+  if (url.length > 0) return `url:${url.toLowerCase()}`;
+  const name = typeof job.companyPageName === 'string' ? job.companyPageName.trim() : '';
+  if (name.length > 0) return `name:${name.toLowerCase()}`;
+  return undefined;
+}
+
+function minutesToMs(mins: unknown): number {
+  if (typeof mins !== 'number' || Number.isNaN(mins) || mins <= 0) return 0;
+  return Math.floor(mins * 60_000);
+}
+
 async function main() {
   await connectMongo();
 
@@ -84,10 +125,93 @@ async function main() {
       proxy,
       status: status === 'disabled' ? 'disabled' : 'active',
       authStatus: 'unknown',
+      linkStatus: 'unlinked',
+      companyPages: [],
     });
 
     logger.info('Account created', { accountId: created.accountId });
     return res.status(201).json({ accountId: created.accountId });
+  }));
+
+  app.post('/accounts/bulk', asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    const items = (body.items ?? body.accounts) as unknown;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Missing items/accounts array' });
+    }
+
+    const createdIds: string[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i] as Record<string, unknown>;
+      const accountId = normalizeText(it.accountId);
+      const displayName = normalizeText(it.displayName);
+      const email = normalizeText(it.email);
+      const timezone = normalizeText(it.timezone);
+      const status = it.status === 'disabled' ? 'disabled' : 'active';
+
+      if (!accountId) return res.status(400).json({ error: `Item[${i}] missing accountId` });
+      if (!displayName) return res.status(400).json({ error: `Item[${i}] missing displayName` });
+      if (!email) return res.status(400).json({ error: `Item[${i}] missing email` });
+      if (!timezone) return res.status(400).json({ error: `Item[${i}] missing timezone` });
+
+      const existing = await AccountModel.findOne({ accountId }).lean();
+      if (existing) {
+        continue;
+      }
+
+      await AccountModel.create({
+        accountId,
+        displayName,
+        email,
+        timezone,
+        proxy: it.proxy,
+        status,
+        authStatus: 'unknown',
+        linkStatus: 'unlinked',
+        companyPages: [],
+      });
+      createdIds.push(accountId);
+    }
+
+    return res.status(201).json({ accountIds: createdIds });
+  }));
+
+  app.get('/accounts/:accountId/company-pages', asyncHandler(async (req: Request, res: Response) => {
+    const accountId = req.params.accountId;
+    const account = await AccountModel.findOne({ accountId }, { storageStateEnc: 0 }).lean();
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    return res.json((account as any).companyPages || []);
+  }));
+
+  app.post('/accounts/:accountId/company-pages', asyncHandler(async (req: Request, res: Response) => {
+    const accountId = req.params.accountId;
+    const { pageId, name, url } = req.body as Record<string, unknown>;
+    const finalPageId = normalizeText(pageId) || `page_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const finalName = normalizeText(name);
+    const finalUrl = normalizeCompanyPageUrl(url);
+
+    if (!finalName) return res.status(400).json({ error: 'Missing name' });
+    if (!finalUrl) return res.status(400).json({ error: 'Missing/invalid url' });
+
+    const account = await AccountModel.findOne({ accountId }).lean();
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+
+    const pages = ((account as any).companyPages as any[]) || [];
+    const already = pages.some(p => normalizeCompanyPageUrl(p.url)?.toLowerCase() === finalUrl.toLowerCase());
+    if (already) return res.status(409).json({ error: 'Company page already exists for this account' });
+
+    await AccountModel.updateOne(
+      { accountId },
+      { $push: { companyPages: { pageId: finalPageId, name: finalName, url: finalUrl } } }
+    );
+
+    return res.status(201).json({ pageId: finalPageId });
+  }));
+
+  app.delete('/accounts/:accountId/company-pages/:pageId', asyncHandler(async (req: Request, res: Response) => {
+    const { accountId, pageId } = req.params;
+    await AccountModel.updateOne({ accountId }, { $pull: { companyPages: { pageId } } });
+    return res.json({ ok: true });
   }));
 
   app.patch('/accounts/:accountId', asyncHandler(async (req: Request, res: Response) => {
@@ -192,6 +316,64 @@ async function main() {
     return res.status(201).json({ articleId: created.articleId });
   }));
 
+  app.post('/articles/bulk', asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    const items = (body.items ?? body.articles) as unknown;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Missing items/articles array' });
+    }
+
+    const createdIds: string[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i] as Record<string, unknown>;
+      const articleId = normalizeText(it.articleId);
+      const language = normalizeText(it.language);
+      const title = normalizeText(it.title);
+      const markdownContent = normalizeText(it.markdownContent);
+      const coverImagePath = it.coverImagePath;
+      const communityPostText = it.communityPostText;
+
+      if (!articleId) return res.status(400).json({ error: `Item[${i}] missing articleId` });
+      if (!language) return res.status(400).json({ error: `Item[${i}] missing language` });
+      if (!title) return res.status(400).json({ error: `Item[${i}] missing title` });
+      if (!markdownContent) return res.status(400).json({ error: `Item[${i}] missing markdownContent` });
+      if (coverImagePath !== undefined && !isHttpUrl(coverImagePath)) {
+        return res.status(400).json({ error: `Item[${i}] coverImagePath must be an http(s) URL` });
+      }
+
+      const existing = await ArticleModel.findOne({ articleId }).lean();
+      if (existing) continue;
+
+      await ArticleModel.create({
+        articleId,
+        language,
+        title,
+        markdownContent,
+        coverImagePath,
+        communityPostText,
+        status: 'draft',
+      });
+      createdIds.push(articleId);
+    }
+
+    return res.status(201).json({ articleIds: createdIds });
+  }));
+
+  app.post('/articles/ready/bulk', asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    const articleIds = body.articleIds as unknown;
+    if (!Array.isArray(articleIds) || articleIds.length === 0) {
+      return res.status(400).json({ error: 'Missing articleIds array' });
+    }
+
+    const ids = articleIds.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map(v => v.trim());
+    await ArticleModel.updateMany(
+      { articleId: { $in: ids }, status: { $ne: 'published' } },
+      { $set: { status: 'ready' } }
+    );
+    return res.json({ ok: true, articleIds: ids });
+  }));
+
   app.patch('/articles/:articleId', asyncHandler(async (req: Request, res: Response) => {
     const { articleId } = req.params;
     if (!articleId) return res.status(400).json({ error: 'Missing articleId' });
@@ -269,6 +451,203 @@ async function main() {
     return res.json(jobs);
   }));
 
+  app.post('/publish-jobs/bulk', asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    const items = (body.items ?? body.jobs) as unknown;
+
+    const schedulePolicy = typeof body.schedulePolicy === 'object' && body.schedulePolicy
+      ? (body.schedulePolicy as Record<string, unknown>)
+      : undefined;
+
+    const minGapMinutesPerAccount = schedulePolicy ? (schedulePolicy.minGapMinutesPerAccount as unknown) : undefined;
+    const minGapMinutesPerCompanyPage = schedulePolicy ? (schedulePolicy.minGapMinutesPerCompanyPage as unknown) : undefined;
+    const minGapAccountMs = minutesToMs(minGapMinutesPerAccount);
+    const minGapCompanyMs = minutesToMs(minGapMinutesPerCompanyPage);
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Missing items/jobs array' });
+    }
+
+    const normalized = items.map((raw, idx) => {
+      const it = raw as Record<string, unknown>;
+      const accountId = it.accountId;
+      const articleId = it.articleId;
+      const runAt = it.runAt;
+
+      if (typeof accountId !== 'string' || accountId.trim().length === 0) {
+        throw new Error(`Item[${idx}] missing accountId`);
+      }
+      if (typeof articleId !== 'string' || articleId.trim().length === 0) {
+        throw new Error(`Item[${idx}] missing articleId`);
+      }
+
+      const parsedRequestedRunAt = runAt instanceof Date ? runAt : (typeof runAt === 'string' ? new Date(runAt) : new Date());
+      if (Number.isNaN(parsedRequestedRunAt.getTime())) {
+        throw new Error(`Item[${idx}] has invalid runAt`);
+      }
+
+      const delayProfile = typeof it.delayProfile === 'string' ? it.delayProfile : 'default';
+      const typingProfile = typeof it.typingProfile === 'string' ? it.typingProfile : 'medium';
+      if (!staticCfg.delays[delayProfile]) {
+        throw new Error(`Item[${idx}] unknown delayProfile: ${delayProfile}`);
+      }
+      if (!staticCfg.typingProfiles[typingProfile]) {
+        throw new Error(`Item[${idx}] unknown typingProfile: ${typingProfile}`);
+      }
+
+      const companyPageUrl = typeof it.companyPageUrl === 'string' && it.companyPageUrl.trim().length > 0
+        ? it.companyPageUrl.trim()
+        : undefined;
+      const companyPageName = typeof it.companyPageName === 'string' && it.companyPageName.trim().length > 0
+        ? it.companyPageName.trim()
+        : undefined;
+
+      const jobId = typeof it.jobId === 'string' && it.jobId.trim().length > 0
+        ? it.jobId.trim()
+        : `job_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${idx}`;
+
+      return {
+        idx,
+        jobId,
+        accountId: accountId.trim(),
+        articleId: articleId.trim(),
+        requestedRunAt: parsedRequestedRunAt,
+        delayProfile,
+        typingProfile,
+        companyPageUrl,
+        companyPageName,
+      };
+    });
+
+    const accountIds = Array.from(new Set(normalized.map(n => n.accountId)));
+    const companyKeys = Array.from(
+      new Set(
+        normalized
+          .map(n => companyPageKeyFrom(n))
+          .filter((v): v is string => typeof v === 'string' && v.length > 0)
+      )
+    );
+
+    const existingJobs = await PublishJobModel.find(
+      {
+        status: { $in: ['pending', 'running'] },
+        $or: [
+          { accountId: { $in: accountIds } },
+          ...(companyKeys.length > 0
+            ? [{ $or: companyKeys.map(k => (k.startsWith('url:') ? { companyPageUrl: k.slice(4) } : { companyPageName: k.slice(5) })) }]
+            : []),
+        ],
+      },
+      { jobId: 1, accountId: 1, runAt: 1, companyPageUrl: 1, companyPageName: 1 }
+    )
+      .sort({ runAt: 1 })
+      .lean();
+
+    const lastPerAccount = new Map<string, number>();
+    const lastPerCompany = new Map<string, number>();
+
+    for (const j of existingJobs as any[]) {
+      if (typeof j.accountId === 'string' && j.runAt) {
+        const t = new Date(j.runAt).getTime();
+        lastPerAccount.set(j.accountId, Math.max(lastPerAccount.get(j.accountId) ?? 0, t));
+      }
+      const key = companyPageKeyFrom({ companyPageUrl: j.companyPageUrl, companyPageName: j.companyPageName });
+      if (key && j.runAt) {
+        const t = new Date(j.runAt).getTime();
+        lastPerCompany.set(key, Math.max(lastPerCompany.get(key) ?? 0, t));
+      }
+    }
+
+    const createdJobIds: string[] = [];
+    const computed: Array<{ jobId: string; runAt: string; requestedRunAt: string; accountId: string; articleId: string }> = [];
+
+    for (const n of normalized) {
+      const account = (await AccountModel.findOne({ accountId: n.accountId }).lean()) as AccountDoc | null;
+      if (!account) {
+        return res.status(404).json({ error: `Account not found: ${n.accountId}` });
+      }
+      if (account.status !== 'active') {
+        return res.status(400).json({ error: `Account is not active: ${n.accountId}` });
+      }
+      if (!account.storageStateEnc || account.authStatus !== 'valid' || (account as any).linkStatus !== 'linked') {
+        return res.status(400).json({ error: `Account not authenticated: ${n.accountId}` });
+      }
+
+      if (!accountHasCompanyPage(account, { companyPageUrl: n.companyPageUrl, companyPageName: n.companyPageName })) {
+        return res.status(400).json({ error: `Company page not linked to account: ${n.accountId}` });
+      }
+
+      const article = (await ArticleModel.findOne({ articleId: n.articleId }).lean()) as ArticleDoc | null;
+      if (!article) {
+        return res.status(404).json({ error: `Article not found: ${n.articleId}` });
+      }
+      if (!article.markdownContent || article.markdownContent.trim().length === 0) {
+        return res.status(400).json({ error: `Article markdownContent empty: ${n.articleId}` });
+      }
+
+      const existingForArticle = await PublishJobModel.findOne({
+        articleId: n.articleId,
+        status: { $in: ['pending', 'running'] },
+      }).lean();
+      if (existingForArticle) {
+        return res.status(409).json({ error: `Article already has a pending/running job: ${n.articleId}` });
+      }
+
+      const requestedMs = n.requestedRunAt.getTime();
+      const lastAccMs = lastPerAccount.get(n.accountId) ?? 0;
+      const accReady = lastAccMs > 0 ? lastAccMs + minGapAccountMs : 0;
+
+      const companyKey = companyPageKeyFrom(n);
+      const lastCompMs = companyKey ? (lastPerCompany.get(companyKey) ?? 0) : 0;
+      const compReady = companyKey && lastCompMs > 0 ? lastCompMs + minGapCompanyMs : 0;
+
+      const scheduledMs = Math.max(requestedMs, accReady, compReady, Date.now());
+      const runAtDate = new Date(scheduledMs);
+
+      await PublishJobModel.create({
+        jobId: n.jobId,
+        accountId: n.accountId,
+        articleId: n.articleId,
+        runAt: runAtDate,
+        requestedRunAt: n.requestedRunAt,
+        delayProfile: n.delayProfile,
+        typingProfile: n.typingProfile,
+        companyPageUrl: n.companyPageUrl,
+        companyPageName: n.companyPageName,
+        schedulePolicy: {
+          minGapMinutesPerAccount: typeof minGapMinutesPerAccount === 'number' ? minGapMinutesPerAccount : undefined,
+          minGapMinutesPerCompanyPage: typeof minGapMinutesPerCompanyPage === 'number' ? minGapMinutesPerCompanyPage : undefined,
+        },
+        status: 'pending',
+      });
+
+      await ArticleModel.updateOne(
+        { articleId: n.articleId },
+        { $set: { status: 'scheduled', scheduledAt: runAtDate } }
+      );
+
+      lastPerAccount.set(n.accountId, scheduledMs);
+      if (companyKey) lastPerCompany.set(companyKey, scheduledMs);
+
+      createdJobIds.push(n.jobId);
+      computed.push({
+        jobId: n.jobId,
+        runAt: runAtDate.toISOString(),
+        requestedRunAt: n.requestedRunAt.toISOString(),
+        accountId: n.accountId,
+        articleId: n.articleId,
+      });
+    }
+
+    logger.info('Bulk publish jobs scheduled', {
+      count: createdJobIds.length,
+      minGapMinutesPerAccount,
+      minGapMinutesPerCompanyPage,
+    });
+
+    return res.status(201).json({ jobIds: createdJobIds, items: computed });
+  }));
+
   app.post('/publish-jobs', asyncHandler(async (req: Request, res: Response) => {
     const {
       accountId,
@@ -288,8 +667,12 @@ async function main() {
     const account = (await AccountModel.findOne({ accountId }).lean()) as AccountDoc | null;
     if (!account) return res.status(404).json({ error: 'Account not found' });
     if (account.status !== 'active') return res.status(400).json({ error: 'Account is not active' });
-    if (!account.storageStateEnc || account.authStatus !== 'valid') {
+    if (!account.storageStateEnc || account.authStatus !== 'valid' || (account as any).linkStatus !== 'linked') {
       return res.status(400).json({ error: 'Account is not authenticated. Run bootstrap to login first.' });
+    }
+
+    if (!accountHasCompanyPage(account, { companyPageUrl: companyPageUrl as any, companyPageName: companyPageName as any })) {
+      return res.status(400).json({ error: 'Company page not linked to this account' });
     }
 
     const article = (await ArticleModel.findOne({ articleId }).lean()) as ArticleDoc | null;
@@ -337,6 +720,7 @@ async function main() {
         accountId,
         articleId,
         runAt: parsedRunAt,
+        requestedRunAt: parsedRunAt,
         delayProfile: delayKey,
         typingProfile: typingKey,
         companyPageUrl: finalCompanyPageUrl,

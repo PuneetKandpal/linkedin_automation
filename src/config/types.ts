@@ -54,6 +54,12 @@ export interface PublishJob {
   articleId: string;
   delayProfile: string;
   typingProfile: string;
+  companyPageUrl?: string;
+  companyPageName?: string;
+  schedulePolicy?: {
+    minGapMinutesPerAccount?: number;
+    minGapMinutesPerCompanyPage?: number;
+  };
 }
 
 export interface DelayRange {

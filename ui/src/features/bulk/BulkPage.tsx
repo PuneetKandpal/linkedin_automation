@@ -132,21 +132,25 @@ function parseArticles(rows: Record<string, unknown>[]): ParsedResult<CreateArti
       pickCell(r, 'markdowncontent', 'markdownContent', 'markdown content', 'content', 'markdown')
     );
     const coverImagePath = asString(pickCell(r, 'coverimagepath', 'coverImagePath', 'cover image url', 'coverImageUrl'));
-    const communityPostText = asString(pickCell(r, 'communityposttext', 'communityPostText', 'community post text'));
+    const communityPostText = asString(
+      pickCell(r, 'communityposttext', 'communityPostText', 'community post text')
+    );
 
     if (!articleId) errors.push({ row: rowNum, message: 'Missing articleId' });
     if (!language) errors.push({ row: rowNum, message: 'Missing language' });
     if (!title) errors.push({ row: rowNum, message: 'Missing title' });
     if (!markdownContent) errors.push({ row: rowNum, message: 'Missing markdownContent' });
+    if (!coverImagePath) errors.push({ row: rowNum, message: 'Missing coverImagePath' });
+    if (!communityPostText) errors.push({ row: rowNum, message: 'Missing communityPostText' });
 
-    if (articleId && language && title && markdownContent) {
+    if (articleId && language && title && markdownContent && coverImagePath && communityPostText) {
       items.push({
         articleId,
         language,
         title,
         markdownContent,
-        coverImagePath: coverImagePath || undefined,
-        communityPostText: communityPostText || undefined,
+        coverImagePath,
+        communityPostText,
       });
     }
   }
@@ -232,7 +236,7 @@ export function BulkPage() {
       return 'Excel columns: accountId, displayName, email, timezone, status (active|disabled).';
     }
     if (mode === 'articles') {
-      return 'Excel columns: articleId, language, title, markdownContent, coverImagePath (optional), communityPostText (optional).';
+      return 'Excel columns: articleId, language, title, markdownContent, coverImagePath, communityPostText.';
     }
     return 'Excel columns: jobId (optional), accountId, articleId, runAt (ISO), companyPageUrl, delayProfile (optional), typingProfile (optional).';
   }, [mode]);
@@ -394,6 +398,7 @@ export function BulkPage() {
         <div className="form">
           <Field label="Template">
             <select
+              className="selectFancy"
               value={mode}
               onChange={e => {
                 setMode(e.target.value as Mode);
@@ -411,10 +416,17 @@ export function BulkPage() {
 
           {mode === 'articles' ? (
             <Field label="After import">
-              <label className="row" style={{ gap: 8 }}>
-                <input type="checkbox" checked={markReady} onChange={e => setMarkReady(e.target.checked)} />
-                Mark imported articles as ready
-              </label>
+              <div className="toggleSwitch">
+                <button
+                  type="button"
+                  className={`toggleButton${markReady ? ' active' : ''}`}
+                  aria-pressed={markReady}
+                  onClick={() => setMarkReady(prev => !prev)}
+                >
+                  <span className="srOnly">Toggle mark ready</span>
+                </button>
+                <span className="toggleLabel">Mark imported articles as ready</span>
+              </div>
             </Field>
           ) : null}
 

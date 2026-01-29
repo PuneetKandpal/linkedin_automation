@@ -319,6 +319,73 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
  }
 
+ .searchSelect {
+  position: relative;
+}
+
+.searchSelectInput {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-muted);
+  color: var(--text);
+  padding: 10px 12px;
+}
+
+.searchSelectList {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
+  z-index: 10;
+}
+
+.searchSelectEmpty {
+  padding: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.searchSelectOption {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.searchSelectOption:hover {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.searchSelectOption.selected {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.searchSelectOption.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.searchSelectBadge {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
  .tableWrap {
    overflow: auto;
  }

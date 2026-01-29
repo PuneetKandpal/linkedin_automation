@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ApiError } from '../../api/http';
 import { AccountsApi } from '../../api/accounts';
 import { ArticlesApi } from '../../api/articles';
@@ -12,10 +12,105 @@ function toIsoFromLocal(value: string): string {
   return d.toISOString();
 }
 
+type SearchOption = {
+  value: string;
+  label: string;
+  note?: string;
+  disabled?: boolean;
+};
+
 function defaultLocalDateTime(minutesFromNow: number): string {
   const d = new Date(Date.now() + minutesFromNow * 60 * 1000);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function SearchSelect(
+  props: {
+    value: string;
+    placeholder?: string;
+    options: SearchOption[];
+    onChange: (value: string) => void;
+    onBlur?: () => void;
+  }
+) {
+  const { value, options, onChange, onBlur, placeholder } = props;
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const selected = useMemo(() => options.find(o => o.value === value) || null, [options, value]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setQuery('');
+        onBlur?.();
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [selected, onBlur]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter(o => o.label.toLowerCase().includes(q));
+  }, [options, query]);
+
+  function selectOption(opt: SearchOption) {
+    if (opt.disabled) return;
+    onChange(opt.value);
+    setQuery('');
+    setOpen(false);
+    onBlur?.();
+  }
+
+  return (
+    <div className="searchSelect" ref={containerRef}>
+      <input
+        className="searchSelectInput"
+        value={open ? query : selected?.label ?? ''}
+        placeholder={placeholder}
+        onFocus={() => {
+          setOpen(true);
+          setQuery('');
+        }}
+        onChange={e => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onBlur={() => {
+          if (!open) onBlur?.();
+        }}
+      />
+      {open ? (
+        <div className="searchSelectList">
+          {filtered.length === 0 ? (
+            <div className="searchSelectEmpty">No matches</div>
+          ) : (
+            filtered.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`searchSelectOption${opt.disabled ? ' disabled' : ''}${opt.value === value ? ' selected' : ''}`}
+                onMouseDown={e => {
+                  e.preventDefault();
+                  selectOption(opt);
+                }}
+                disabled={opt.disabled}
+              >
+                <span>{opt.label}</span>
+                {opt.note ? <span className="searchSelectBadge">{opt.note}</span> : null}
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function JobsPage() {
@@ -99,7 +194,16 @@ export function JobsPage() {
     void refreshAll();
   }, [refreshAll]);
 
-  const accountOptions = useMemo(() => accounts.filter(a => a.status === 'active'), [accounts]);
+  const accountOptions = useMemo(() =>
+    accounts
+      .filter(a => a.status === 'active')
+      .map(a => ({
+        value: a.accountId,
+        label: `${a.displayName} (${a.accountId})`,
+        disabled: a.linkStatus !== 'linked',
+        note: a.linkStatus !== 'linked' ? 'Unlinked' : undefined,
+      })),
+  [accounts]);
 
   const selectedAccount = useMemo(
     () => accounts.find(a => a.accountId === accountId) || null,
@@ -112,7 +216,13 @@ export function JobsPage() {
   }, [selectedAccount]);
 
   const articleOptions = useMemo(
-    () => articles.filter(a => a.status !== 'published'),
+    () =>
+      articles.map(a => ({
+        value: a.articleId,
+        label: `${a.title} (${a.articleId})`,
+        disabled: a.status === 'draft',
+        note: a.status === 'draft' ? 'Draft' : undefined,
+      })),
     [articles]
   );
 
@@ -305,18 +415,13 @@ export function JobsPage() {
           </Field>
 
           <Field label="Account" error={touched.accountId ? formErrors.accountId : undefined}>
-            <select
+            <SearchSelect
               value={accountId}
-              onChange={e => setAccountId(e.target.value)}
+              options={accountOptions}
+              placeholder="Search account…"
+              onChange={setAccountId}
               onBlur={() => setTouched(t => ({ ...t, accountId: true }))}
-            >
-              <option value="">Select…</option>
-              {accountOptions.map(a => (
-                <option key={a.accountId} value={a.accountId}>
-                  {a.displayName} ({a.accountId})
-                </option>
-              ))}
-            </select>
+            />
           </Field>
 
           <Field label="Company page" error={touched.companyPageUrl ? formErrors.companyPageUrl : undefined}>
@@ -335,18 +440,13 @@ export function JobsPage() {
           </Field>
 
           <Field label="Article" error={touched.articleId ? formErrors.articleId : undefined}>
-            <select
+            <SearchSelect
               value={articleId}
-              onChange={e => setArticleId(e.target.value)}
+              options={articleOptions}
+              placeholder="Search article…"
+              onChange={setArticleId}
               onBlur={() => setTouched(t => ({ ...t, articleId: true }))}
-            >
-              <option value="">Select article…</option>
-              {articleOptions.map(a => (
-                <option key={a.articleId} value={a.articleId}>
-                  {a.title} ({a.articleId})
-                </option>
-              ))}
-            </select>
+            />
           </Field>
 
           <Field label="Run At" error={touched.runAtLocal ? formErrors.runAtLocal : undefined}>

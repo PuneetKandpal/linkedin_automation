@@ -68,8 +68,13 @@ export function JobsPage() {
     setError(null);
     setSuccess(null);
     try {
-      const parsed = JSON.parse(bulkJson || '{}') as any;
-      const items = Array.isArray(parsed.items) ? parsed.items : (Array.isArray(parsed.jobs) ? parsed.jobs : null);
+      const parsed: unknown = JSON.parse(bulkJson || '{}');
+      const obj = (parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null);
+      const items = obj && Array.isArray(obj.items)
+        ? obj.items
+        : obj && Array.isArray(obj.jobs)
+          ? obj.jobs
+          : null;
       if (!items) {
         setError('Bulk JSON must include items: []');
         return;
@@ -232,17 +237,19 @@ export function JobsPage() {
                       text={j.status}
                     />
                   </td>
-                  <td className="row">
-                    {j.status === 'failed' ? (
-                      <Button variant="ghost" onClick={() => openFailure(j)}>
-                        View
-                      </Button>
-                    ) : null}
-                    {j.status === 'pending' ? (
-                      <Button variant="ghost" onClick={() => void cancelJob(j.jobId)}>
-                        Cancel
-                      </Button>
-                    ) : null}
+                  <td>
+                    <div className="row">
+                      {j.status === 'failed' ? (
+                        <Button variant="ghost" onClick={() => openFailure(j)}>
+                          View
+                        </Button>
+                      ) : null}
+                      {j.status === 'pending' ? (
+                        <Button variant="ghost" onClick={() => void cancelJob(j.jobId)}>
+                          Cancel
+                        </Button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}

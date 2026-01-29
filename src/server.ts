@@ -1,5 +1,6 @@
 import './env';
 import express, { NextFunction, Request, Response } from 'express';
+import cors from 'cors';
 import { connectMongo } from './db/mongo';
 import { AccountModel } from './db/models/AccountModel';
 import { ArticleModel } from './db/models/ArticleModel';
@@ -72,6 +73,8 @@ async function main() {
   const staticCfg = new StaticConfigLoader(configDir).loadAll();
 
   const app = express();
+  const corsOrigin = process.env.CORS_ORIGIN || '*';
+  app.use(cors({ origin: corsOrigin === '*' ? corsOrigin : corsOrigin.split(',').map(origin => origin.trim()).filter(Boolean), credentials: true }));
   app.use(express.json({ limit: '10mb' }));
 
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -147,12 +150,14 @@ async function main() {
       const displayName = normalizeText(it.displayName);
       const email = normalizeText(it.email);
       const timezone = normalizeText(it.timezone);
-      const status = it.status === 'disabled' ? 'disabled' : 'active';
+      const statusRaw = normalizeText(it.status);
+      const status = statusRaw ? (statusRaw === 'disabled' ? 'disabled' : statusRaw === 'active' ? 'active' : null) : 'active';
 
-      if (!accountId) return res.status(400).json({ error: `Item[${i}] missing accountId` });
-      if (!displayName) return res.status(400).json({ error: `Item[${i}] missing displayName` });
-      if (!email) return res.status(400).json({ error: `Item[${i}] missing email` });
-      if (!timezone) return res.status(400).json({ error: `Item[${i}] missing timezone` });
+      if (!accountId) return res.status(400).json({ error: `Item[${i}] missing accountId`, itemIndex: i, field: 'accountId' });
+      if (!displayName) return res.status(400).json({ error: `Item[${i}] missing displayName`, itemIndex: i, field: 'displayName' });
+      if (!email) return res.status(400).json({ error: `Item[${i}] missing email`, itemIndex: i, field: 'email' });
+      if (!timezone) return res.status(400).json({ error: `Item[${i}] missing timezone`, itemIndex: i, field: 'timezone' });
+      if (!status) return res.status(400).json({ error: `Item[${i}] invalid status`, itemIndex: i, field: 'status' });
 
       const existing = await AccountModel.findOne({ accountId }).lean();
       if (existing) {
@@ -333,12 +338,15 @@ async function main() {
       const coverImagePath = it.coverImagePath;
       const communityPostText = it.communityPostText;
 
-      if (!articleId) return res.status(400).json({ error: `Item[${i}] missing articleId` });
-      if (!language) return res.status(400).json({ error: `Item[${i}] missing language` });
-      if (!title) return res.status(400).json({ error: `Item[${i}] missing title` });
-      if (!markdownContent) return res.status(400).json({ error: `Item[${i}] missing markdownContent` });
-      if (coverImagePath !== undefined && !isHttpUrl(coverImagePath)) {
-        return res.status(400).json({ error: `Item[${i}] coverImagePath must be an http(s) URL` });
+      if (!articleId) return res.status(400).json({ error: `Item[${i}] missing articleId`, itemIndex: i, field: 'articleId' });
+      if (!language) return res.status(400).json({ error: `Item[${i}] missing language`, itemIndex: i, field: 'language' });
+      if (!title) return res.status(400).json({ error: `Item[${i}] missing title`, itemIndex: i, field: 'title' });
+      if (!markdownContent) return res.status(400).json({ error: `Item[${i}] missing markdownContent`, itemIndex: i, field: 'markdownContent' });
+      if (coverImagePath !== undefined && coverImagePath !== null && typeof coverImagePath !== 'string') {
+        return res.status(400).json({ error: `Item[${i}] coverImagePath must be a string URL`, itemIndex: i, field: 'coverImagePath' });
+      }
+      if (coverImagePath !== undefined && coverImagePath !== null && !isHttpUrl(coverImagePath)) {
+        return res.status(400).json({ error: `Item[${i}] coverImagePath must be an http(s) URL`, itemIndex: i, field: 'coverImagePath' });
       }
 
       const existing = await ArticleModel.findOne({ articleId }).lean();
@@ -468,56 +476,75 @@ async function main() {
       return res.status(400).json({ error: 'Missing items/jobs array' });
     }
 
-    const normalized = items.map((raw, idx) => {
-      const it = raw as Record<string, unknown>;
-      const accountId = it.accountId;
-      const articleId = it.articleId;
-      const runAt = it.runAt;
+    let normalized: Array<{
+      idx: number;
+      jobId: string;
+      accountId: string;
+      articleId: string;
+      requestedRunAt: Date;
+      delayProfile: string;
+      typingProfile: string;
+      companyPageUrl?: string;
+      companyPageName?: string;
+    }>;
 
-      if (typeof accountId !== 'string' || accountId.trim().length === 0) {
-        throw new Error(`Item[${idx}] missing accountId`);
-      }
-      if (typeof articleId !== 'string' || articleId.trim().length === 0) {
-        throw new Error(`Item[${idx}] missing articleId`);
-      }
+    try {
+      normalized = items.map((raw, idx) => {
+        const it = raw as Record<string, unknown>;
+        const accountId = it.accountId;
+        const articleId = it.articleId;
+        const runAt = it.runAt;
 
-      const parsedRequestedRunAt = runAt instanceof Date ? runAt : (typeof runAt === 'string' ? new Date(runAt) : new Date());
-      if (Number.isNaN(parsedRequestedRunAt.getTime())) {
-        throw new Error(`Item[${idx}] has invalid runAt`);
-      }
+        if (typeof accountId !== 'string' || accountId.trim().length === 0) {
+          throw Object.assign(new Error('Missing accountId'), { itemIndex: idx, field: 'accountId' });
+        }
+        if (typeof articleId !== 'string' || articleId.trim().length === 0) {
+          throw Object.assign(new Error('Missing articleId'), { itemIndex: idx, field: 'articleId' });
+        }
 
-      const delayProfile = typeof it.delayProfile === 'string' ? it.delayProfile : 'default';
-      const typingProfile = typeof it.typingProfile === 'string' ? it.typingProfile : 'medium';
-      if (!staticCfg.delays[delayProfile]) {
-        throw new Error(`Item[${idx}] unknown delayProfile: ${delayProfile}`);
-      }
-      if (!staticCfg.typingProfiles[typingProfile]) {
-        throw new Error(`Item[${idx}] unknown typingProfile: ${typingProfile}`);
-      }
+        const parsedRequestedRunAt = runAt instanceof Date ? runAt : (typeof runAt === 'string' ? new Date(runAt) : new Date());
+        if (Number.isNaN(parsedRequestedRunAt.getTime())) {
+          throw Object.assign(new Error('Invalid runAt'), { itemIndex: idx, field: 'runAt' });
+        }
 
-      const companyPageUrl = typeof it.companyPageUrl === 'string' && it.companyPageUrl.trim().length > 0
-        ? it.companyPageUrl.trim()
-        : undefined;
-      const companyPageName = typeof it.companyPageName === 'string' && it.companyPageName.trim().length > 0
-        ? it.companyPageName.trim()
-        : undefined;
+        const delayProfile = typeof it.delayProfile === 'string' ? it.delayProfile : 'default';
+        const typingProfile = typeof it.typingProfile === 'string' ? it.typingProfile : 'medium';
+        if (!staticCfg.delays[delayProfile]) {
+          throw Object.assign(new Error(`Unknown delayProfile: ${delayProfile}`), { itemIndex: idx, field: 'delayProfile' });
+        }
+        if (!staticCfg.typingProfiles[typingProfile]) {
+          throw Object.assign(new Error(`Unknown typingProfile: ${typingProfile}`), { itemIndex: idx, field: 'typingProfile' });
+        }
 
-      const jobId = typeof it.jobId === 'string' && it.jobId.trim().length > 0
-        ? it.jobId.trim()
-        : `job_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${idx}`;
+        const companyPageUrl = typeof it.companyPageUrl === 'string' && it.companyPageUrl.trim().length > 0
+          ? it.companyPageUrl.trim()
+          : undefined;
+        const companyPageName = typeof it.companyPageName === 'string' && it.companyPageName.trim().length > 0
+          ? it.companyPageName.trim()
+          : undefined;
 
-      return {
-        idx,
-        jobId,
-        accountId: accountId.trim(),
-        articleId: articleId.trim(),
-        requestedRunAt: parsedRequestedRunAt,
-        delayProfile,
-        typingProfile,
-        companyPageUrl,
-        companyPageName,
-      };
-    });
+        const jobId = typeof it.jobId === 'string' && it.jobId.trim().length > 0
+          ? it.jobId.trim()
+          : `job_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${idx}`;
+
+        return {
+          idx,
+          jobId,
+          accountId: accountId.trim(),
+          articleId: articleId.trim(),
+          requestedRunAt: parsedRequestedRunAt,
+          delayProfile,
+          typingProfile,
+          companyPageUrl,
+          companyPageName,
+        };
+      });
+    } catch (e) {
+      const err = e as any;
+      const itemIndex = typeof err.itemIndex === 'number' ? err.itemIndex : undefined;
+      const field = typeof err.field === 'string' ? err.field : undefined;
+      return res.status(400).json({ error: (err && err.message) ? err.message : 'Invalid bulk item', itemIndex, field });
+    }
 
     const accountIds = Array.from(new Set(normalized.map(n => n.accountId)));
     const companyKeys = Array.from(
@@ -564,25 +591,25 @@ async function main() {
     for (const n of normalized) {
       const account = (await AccountModel.findOne({ accountId: n.accountId }).lean()) as AccountDoc | null;
       if (!account) {
-        return res.status(404).json({ error: `Account not found: ${n.accountId}` });
+        return res.status(404).json({ error: `Account not found: ${n.accountId}`, itemIndex: n.idx, field: 'accountId' });
       }
       if (account.status !== 'active') {
-        return res.status(400).json({ error: `Account is not active: ${n.accountId}` });
+        return res.status(400).json({ error: `Account is not active: ${n.accountId}`, itemIndex: n.idx, field: 'accountId' });
       }
       if (!account.storageStateEnc || account.authStatus !== 'valid' || (account as any).linkStatus !== 'linked') {
-        return res.status(400).json({ error: `Account not authenticated: ${n.accountId}` });
+        return res.status(400).json({ error: `Account not authenticated: ${n.accountId}`, itemIndex: n.idx, field: 'accountId' });
       }
 
       if (!accountHasCompanyPage(account, { companyPageUrl: n.companyPageUrl, companyPageName: n.companyPageName })) {
-        return res.status(400).json({ error: `Company page not linked to account: ${n.accountId}` });
+        return res.status(400).json({ error: `Company page not linked to account: ${n.accountId}`, itemIndex: n.idx, field: 'companyPageUrl' });
       }
 
       const article = (await ArticleModel.findOne({ articleId: n.articleId }).lean()) as ArticleDoc | null;
       if (!article) {
-        return res.status(404).json({ error: `Article not found: ${n.articleId}` });
+        return res.status(404).json({ error: `Article not found: ${n.articleId}`, itemIndex: n.idx, field: 'articleId' });
       }
       if (!article.markdownContent || article.markdownContent.trim().length === 0) {
-        return res.status(400).json({ error: `Article markdownContent empty: ${n.articleId}` });
+        return res.status(400).json({ error: `Article markdownContent empty: ${n.articleId}`, itemIndex: n.idx, field: 'articleId' });
       }
 
       const existingForArticle = await PublishJobModel.findOne({
@@ -590,7 +617,7 @@ async function main() {
         status: { $in: ['pending', 'running'] },
       }).lean();
       if (existingForArticle) {
-        return res.status(409).json({ error: `Article already has a pending/running job: ${n.articleId}` });
+        return res.status(409).json({ error: `Article already has a pending/running job: ${n.articleId}`, itemIndex: n.idx, field: 'articleId' });
       }
 
       const requestedMs = n.requestedRunAt.getTime();

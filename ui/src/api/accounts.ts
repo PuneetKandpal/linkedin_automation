@@ -20,6 +20,12 @@ export const AccountsApi = {
       body: JSON.stringify(input),
     }),
 
+  bulkCreate: (items: CreateAccountInput[]) =>
+    apiFetchJson<{ accountIds: string[] }>('/accounts/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    }),
+
   update: (accountId: string, patch: UpdateAccountInput) =>
     apiFetchJson<Account>(`/accounts/${encodeURIComponent(accountId)}`, {
       method: 'PATCH',

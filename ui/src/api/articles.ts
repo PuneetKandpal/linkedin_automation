@@ -24,6 +24,12 @@ export const ArticlesApi = {
       body: JSON.stringify(input),
     }),
 
+  bulkCreate: (items: CreateArticleInput[]) =>
+    apiFetchJson<{ articleIds: string[] }>('/articles/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    }),
+
   update: (articleId: string, patch: UpdateArticleInput) =>
     apiFetchJson<Article>(`/articles/${encodeURIComponent(articleId)}`, {
       method: 'PATCH',
@@ -34,5 +40,11 @@ export const ArticlesApi = {
     apiFetchJson<Article>(`/articles/${encodeURIComponent(articleId)}/ready`, {
       method: 'POST',
       body: JSON.stringify({}),
+    }),
+
+  bulkMarkReady: (articleIds: string[]) =>
+    apiFetchJson<{ ok: boolean; articleIds: string[] }>('/articles/ready/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ articleIds }),
     }),
 };

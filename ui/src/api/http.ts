@@ -1,55 +1,63 @@
+import axios, { AxiosError, type AxiosRequestConfig } from 'axios';
+
 export type ApiError = {
   status: number;
   message: string;
   details?: unknown;
 };
 
-async function readErrorBody(res: Response): Promise<unknown> {
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    try {
-      return await res.json();
-    } catch {
-      return undefined;
-    }
-  }
-  try {
-    return await res.text();
-  } catch {
-    return undefined;
-  }
-}
-
 function hasErrorField(value: unknown): value is { error: unknown } {
   return typeof value === 'object' && value !== null && 'error' in value;
+}
+
+const initialBaseUrl = import.meta.env?.VITE_API_BASE_URL?.trim();
+
+const apiClient = axios.create({
+  baseURL: initialBaseUrl || undefined,
+});
+
+export function setApiBaseUrl(baseUrl?: string | null) {
+  apiClient.defaults.baseURL = baseUrl && baseUrl.trim().length > 0 ? baseUrl : undefined;
 }
 
 export async function apiFetchJson<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
-  const res = await fetch(path, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-  });
+  try {
+    const { method, headers, body, signal } = init ?? {};
 
-  if (!res.ok) {
-    const body = await readErrorBody(res);
-    const message =
-      hasErrorField(body)
-        ? String((body as { error: unknown }).error)
-        : `Request failed: ${res.status}`;
+    const config: AxiosRequestConfig = {
+      url: path,
+      method,
+      data: body,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(headers as Record<string, string> | undefined),
+      },
+    };
+
+    if (signal) {
+      config.signal = signal;
+    }
+
+    const response = await apiClient.request<T>(config);
+
+    return response.data as T;
+  } catch (error) {
+    const axiosError = error as AxiosError;
+    const status = axiosError.response?.status ?? 0;
+    const data = axiosError.response?.data;
+
+    const message = hasErrorField(data)
+      ? String((data as { error: unknown }).error)
+      : `Request failed: ${status || 'network error'}`;
 
     const err: ApiError = {
-      status: res.status,
+      status,
       message,
-      details: body,
+      details: data,
     };
     throw err;
   }
-
-  return (await res.json()) as T;
 }

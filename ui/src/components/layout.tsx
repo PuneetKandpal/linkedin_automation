@@ -1,7 +1,7 @@
 import type { PropsWithChildren } from 'react';
 import { Badge } from './ui';
 
-export type TabKey = 'accounts' | 'articles' | 'jobs';
+export type TabKey = 'accounts' | 'articles' | 'jobs' | 'bulk';
 
 export function Layout(
   props: PropsWithChildren<{
@@ -35,6 +35,9 @@ export function Layout(
         </button>
         <button className={props.tab === 'jobs' ? 'tab active' : 'tab'} onClick={() => props.onTabChange('jobs')}>
           Publish Jobs
+        </button>
+        <button className={props.tab === 'bulk' ? 'tab active' : 'tab'} onClick={() => props.onTabChange('bulk')}>
+          Bulk (Excel)
         </button>
       </nav>
 

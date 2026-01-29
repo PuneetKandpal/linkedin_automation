@@ -42,7 +42,7 @@ function SearchSelect(
   const selected = useMemo(() => options.find(o => o.value === value) || null, [options, value]);
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
+    function handlePointerDown(event: PointerEvent) {
       if (!containerRef.current) return;
       if (!containerRef.current.contains(event.target as Node)) {
         setOpen(false);
@@ -50,9 +50,20 @@ function SearchSelect(
         onBlur?.();
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [selected, onBlur]);
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        setQuery('');
+        onBlur?.();
+      }
+    }
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKey);
+    };
+  }, [onBlur]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

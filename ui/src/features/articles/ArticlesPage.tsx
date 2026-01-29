@@ -1,9 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ApiError } from '../../api/http';
 import { ArticlesApi } from '../../api/articles';
-import type { Article } from '../../api/types';
+import type { Article, ArticleStatus } from '../../api/types';
 import { generateArticleId } from '../../utils/id';
 import { Badge, Button, Card, Field, InlineError, InlineSuccess, Modal, Note } from '../../components/ui';
+
+function statusTone(status?: ArticleStatus) {
+  switch (status) {
+    case 'ready':
+      return 'ok';
+    case 'published':
+      return 'info';
+    case 'failed':
+      return 'danger';
+    case 'publishing':
+    case 'scheduled':
+      return 'warn';
+    default:
+      return 'neutral';
+  }
+}
+
+function publishedSource(article: Article): string | null {
+  if (article.publishedFromCompanyPageName) return article.publishedFromCompanyPageName;
+  if (article.publishedFromCompanyPageUrl) return article.publishedFromCompanyPageUrl;
+  return null;
+}
 
 export function ArticlesPage() {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -167,7 +189,7 @@ export function ArticlesPage() {
   }
 
   return (
-    <div className="grid">
+    <div className="articlesLayout">
       <Card
         title="Articles"
         right={
@@ -210,23 +232,27 @@ export function ArticlesPage() {
                   </td>
                   <td>{a.language}</td>
                   <td>
-                    <Badge
-                      tone={
-                        a.status === 'ready'
-                          ? 'ok'
-                          : a.status === 'published'
-                          ? 'ok'
-                          : a.status === 'failed'
-                          ? 'danger'
-                          : 'neutral'
-                      }
-                      text={a.status || 'draft'}
-                    />
+                    <div className="statusCell">
+                      <Badge tone={statusTone(a.status)} text={a.status || 'draft'} />
+                      {a.status === 'published' ? (
+                        <div className="statusMeta">
+                          <div>
+                            by <strong>{a.publishedByAccountName || a.publishedByAccountId || 'Unknown account'}</strong>
+                          </div>
+                          {publishedSource(a) ? (
+                            <div>
+                              from <strong>{publishedSource(a)}</strong>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
                   </td>
                   <td>
                     <div className="row">
                       <Button
                         variant="ghost"
+                        disabled={a.status === 'published'}
                         onClick={() => {
                           openEdit(a);
                         }}
@@ -354,6 +380,7 @@ export function ArticlesPage() {
                 value={editLanguage}
                 onChange={e => setEditLanguage(e.target.value)}
                 onBlur={() => setEditTouched(t => ({ ...t, language: true }))}
+                disabled={selected.status === 'published'}
               />
             </Field>
             <Field label="Title" error={editTouched.title ? editErrors.title : undefined}>
@@ -361,6 +388,7 @@ export function ArticlesPage() {
                 value={editTitle}
                 onChange={e => setEditTitle(e.target.value)}
                 onBlur={() => setEditTouched(t => ({ ...t, title: true }))}
+                disabled={selected.status === 'published'}
               />
             </Field>
             <Field label="Cover Image URL" error={editTouched.coverImagePath ? editErrors.coverImagePath : undefined}>
@@ -369,11 +397,17 @@ export function ArticlesPage() {
                 onChange={e => setEditCoverImagePath(e.target.value)}
                 onBlur={() => setEditTouched(t => ({ ...t, coverImagePath: true }))}
                 placeholder="https://..."
+                disabled={selected.status === 'published'}
               />
             </Field>
             <Note text="LinkedIn cover upload requires an http(s) URL." />
             <Field label="Community Post Text (optional)">
-              <textarea value={editCommunityPostText} onChange={e => setEditCommunityPostText(e.target.value)} rows={3} />
+              <textarea
+                value={editCommunityPostText}
+                onChange={e => setEditCommunityPostText(e.target.value)}
+                rows={3}
+                disabled={selected.status === 'published'}
+              />
             </Field>
             <Field label="Markdown Content" error={editTouched.markdownContent ? editErrors.markdownContent : undefined}>
               <textarea
@@ -381,8 +415,12 @@ export function ArticlesPage() {
                 onChange={e => setEditMarkdownContent(e.target.value)}
                 onBlur={() => setEditTouched(t => ({ ...t, markdownContent: true }))}
                 rows={10}
+                disabled={selected.status === 'published'}
               />
             </Field>
+            {selected.status === 'published' ? (
+              <Note text="Published articles are locked. Duplicate the article to make changes." />
+            ) : null}
           </div>
         ) : null}
       </Modal>

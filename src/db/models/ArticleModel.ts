@@ -13,6 +13,10 @@ export interface ArticleDoc {
   scheduledAt?: Date;
   publishedAt?: Date;
   publishedUrl?: string;
+  publishedByAccountId?: string;
+  publishedByAccountName?: string;
+  publishedFromCompanyPageUrl?: string;
+  publishedFromCompanyPageName?: string;
   lastError?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -37,6 +41,10 @@ const ArticleSchema = new SchemaAny(
     scheduledAt: { type: Date, required: false },
     publishedAt: { type: Date, required: false },
     publishedUrl: { type: String, required: false },
+    publishedByAccountId: { type: String, required: false },
+    publishedByAccountName: { type: String, required: false },
+    publishedFromCompanyPageUrl: { type: String, required: false },
+    publishedFromCompanyPageName: { type: String, required: false },
     lastError: { type: String, required: false },
   } as any,
   { timestamps: true }

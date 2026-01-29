@@ -54,6 +54,10 @@ export type Article = {
   communityPostText?: string;
   status?: ArticleStatus;
   publishedUrl?: string;
+  publishedByAccountId?: string;
+  publishedByAccountName?: string;
+  publishedFromCompanyPageUrl?: string;
+  publishedFromCompanyPageName?: string;
   lastError?: string;
   updatedAt?: string;
 };

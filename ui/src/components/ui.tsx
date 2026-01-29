@@ -61,7 +61,7 @@ export function Note(props: { text: string }) {
   );
 }
 
-export function Badge(props: { tone?: 'ok' | 'warn' | 'danger' | 'neutral'; text: string }) {
+export function Badge(props: { tone?: 'ok' | 'warn' | 'danger' | 'neutral' | 'info'; text: string }) {
   return (
     <span className={`badge badge-${props.tone || 'neutral'}`}>{props.text}</span>
   );

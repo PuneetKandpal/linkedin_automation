@@ -23,6 +23,13 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolvePromise => setTimeout(resolvePromise, ms));
 }
 
+function normalizeCompanyPageUrl(value?: string | null): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\/+$/, '').toLowerCase();
+}
+
 async function runOne(jobId: string, configDir: string): Promise<void> {
   const loader = new StaticConfigLoader(configDir);
   const cfg = loader.loadAll();
@@ -153,8 +160,20 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
     await sessionPage.navigateToLinkedIn();
     await sessionPage.ensureLoggedIn();
 
-    const companyPageUrl = (job as any).companyPageUrl as string | undefined;
-    const companyPageName = (job as any).companyPageName as string | undefined;
+    const rawCompanyPageUrl = typeof (job as any).companyPageUrl === 'string' ? (job as any).companyPageUrl : undefined;
+    let companyPageUrl = rawCompanyPageUrl && rawCompanyPageUrl.trim().length > 0 ? rawCompanyPageUrl.trim() : undefined;
+    let companyPageName = typeof (job as any).companyPageName === 'string' && (job as any).companyPageName.trim().length > 0
+      ? (job as any).companyPageName.trim()
+      : undefined;
+
+    if (!companyPageName && companyPageUrl) {
+      const accountPages = Array.isArray((account as any).companyPages) ? ((account as any).companyPages as Array<{ url?: string; name?: string }>) : [];
+      const normalizedTarget = normalizeCompanyPageUrl(companyPageUrl);
+      const matched = accountPages.find(p => normalizeCompanyPageUrl(p.url) === normalizedTarget);
+      if (matched?.name) {
+        companyPageName = matched.name;
+      }
+    }
     if ((companyPageUrl && companyPageUrl.trim().length > 0) || (companyPageName && companyPageName.trim().length > 0)) {
       await articleEditorPage.openNewCompanyPageArticle({ companyPageUrl, companyPageName });
     } else {
@@ -198,6 +217,10 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
             status: 'published',
             publishedAt: new Date(),
             publishedUrl: articleUrl,
+            publishedByAccountId: account.accountId,
+            publishedByAccountName: account.displayName,
+            publishedFromCompanyPageUrl: companyPageUrl,
+            publishedFromCompanyPageName: companyPageName,
             lastError: undefined,
           },
         }

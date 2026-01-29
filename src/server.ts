@@ -435,6 +435,12 @@ async function main() {
       return res.status(400).json({ error: 'No allowed fields provided to update' });
     }
 
+    const existing = await ArticleModel.findOne({ articleId }).lean();
+    if (!existing) return res.status(404).json({ error: 'Article not found' });
+    if (existing.status === 'published') {
+      return res.status(400).json({ error: 'Published articles cannot be edited' });
+    }
+
     const updated = await ArticleModel.findOneAndUpdate(
       { articleId },
       { $set: update },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ApiError } from '../../api/http';
 import { AccountsApi } from '../../api/accounts';
 import { ArticlesApi } from '../../api/articles';
@@ -7,6 +7,8 @@ import { ConfigApi } from '../../api/config';
 import type { Account, Article, PublishJob } from '../../api/types';
 import { Card, Field, InlineError, Button, Badge, Modal, InlineSuccess, Note } from '../../components/ui';
 import { generateJobId } from '../../utils/id';
+import { TabContext } from '../../context/TabContext';
+import { NAVIGATE_ACCOUNT_KEY, NAVIGATE_ARTICLE_KEY } from '../../constants/navigation';
 
 function toIsoFromLocal(value: string): string {
   const d = new Date(value);
@@ -126,6 +128,7 @@ function SearchSelect(
 }
 
 export function JobsPage() {
+  const tabCtx = useContext(TabContext);
   const [jobs, setJobs] = useState<PublishJob[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -237,6 +240,18 @@ export function JobsPage() {
     [accounts, accountId]
   );
 
+  const accountsMap = useMemo(() => {
+    const map = new Map<string, Account>();
+    accounts.forEach(a => map.set(a.accountId, a));
+    return map;
+  }, [accounts]);
+
+  const articlesMap = useMemo(() => {
+    const map = new Map<string, Article>();
+    articles.forEach(a => map.set(a.articleId, a));
+    return map;
+  }, [articles]);
+
   const companyPageOptions = useMemo(() => {
     const pages = selectedAccount?.companyPages || [];
     return pages;
@@ -266,6 +281,34 @@ export function JobsPage() {
   }, [accountId, articleId, jobId, runAtLocal, companyPageUrl, delayProfile, typingProfile]);
 
   const canSubmit = Object.keys(formErrors).length === 0;
+
+  const goToAccount = useCallback(
+    (targetAccountId: string) => {
+      if (!targetAccountId) return;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(NAVIGATE_ACCOUNT_KEY, targetAccountId);
+        window.dispatchEvent(
+          new CustomEvent(NAVIGATE_ACCOUNT_KEY, { detail: { accountId: targetAccountId } })
+        );
+      }
+      tabCtx?.setTab('accounts');
+    },
+    [tabCtx]
+  );
+
+  const goToArticle = useCallback(
+    (targetArticleId: string) => {
+      if (!targetArticleId) return;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(NAVIGATE_ARTICLE_KEY, targetArticleId);
+        window.dispatchEvent(
+          new CustomEvent(NAVIGATE_ARTICLE_KEY, { detail: { articleId: targetArticleId } })
+        );
+      }
+      tabCtx?.setTab('articles');
+    },
+    [tabCtx]
+  );
 
   function openSchedule() {
     setJobId(generateJobId());
@@ -330,13 +373,21 @@ export function JobsPage() {
   }
 
   return (
-    <div className="grid">
+    <div className="jobsLayout">
       <Card
         title="Publish Jobs"
         right={
-          <Button variant="ghost" onClick={() => void refreshAll()} disabled={loading}>
-            Refresh
-          </Button>
+          <div className="row">
+            <Button variant="primary" onClick={openSchedule}>
+              Schedule
+            </Button>
+            <Button variant="ghost" onClick={openBulk}>
+              Bulk schedule (JSON)
+            </Button>
+            <Button variant="ghost" onClick={() => void refreshAll()} disabled={loading}>
+              Refresh
+            </Button>
+          </div>
         }
       >
         {success ? <InlineSuccess message={success} /> : null}
@@ -347,10 +398,11 @@ export function JobsPage() {
               <tr>
                 <th>Job</th>
                 <th>Account</th>
+                <th>Company page</th>
                 <th>Article</th>
                 <th>Run At</th>
                 <th>Status</th>
-                <th></th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -359,8 +411,27 @@ export function JobsPage() {
                   <td>
                     <div className="strong">{j.jobId}</div>
                   </td>
-                  <td className="muted">{j.accountId}</td>
-                  <td className="muted">{j.articleId}</td>
+                  <td>
+                    <button type="button" className="linkButton" onClick={() => goToAccount(j.accountId)}>
+                      {accountsMap.get(j.accountId)?.displayName || j.accountId}
+                    </button>
+                    <div className="muted">{j.accountId}</div>
+                  </td>
+                  <td>
+                    {j.companyPageUrl ? (
+                      <a className="linkButton" href={j.companyPageUrl} target="_blank" rel="noreferrer">
+                        {j.companyPageName || j.companyPageUrl}
+                      </a>
+                    ) : (
+                      <div className="strong">{j.companyPageName || '—'}</div>
+                    )}
+                  </td>
+                  <td>
+                    <button type="button" className="linkButton" onClick={() => goToArticle(j.articleId)}>
+                      {articlesMap.get(j.articleId)?.title || j.articleId}
+                    </button>
+                    <div className="muted">{j.articleId}</div>
+                  </td>
                   <td>{new Date(j.runAt).toLocaleString()}</td>
                   <td>
                     <Badge
@@ -395,21 +466,6 @@ export function JobsPage() {
             </tbody>
           </table>
         </div>
-      </Card>
-
-      <Card
-        title="Schedule"
-        right={
-          <div className="row">
-            <Button variant="primary" onClick={openSchedule}>
-              Schedule
-            </Button>
-            <Button variant="ghost" onClick={openBulk}>
-              Bulk schedule (JSON)
-            </Button>
-          </div>
-        }
-      >
         <Note text="Scheduling requires the selected account to be linked (bootstrap) and the company page to be added under that account." />
       </Card>
 

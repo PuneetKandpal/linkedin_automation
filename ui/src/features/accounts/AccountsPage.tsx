@@ -4,6 +4,7 @@ import { AccountsApi } from '../../api/accounts';
 import type { Account, AccountIssue, CompanyPage } from '../../api/types';
 import { generateAccountId } from '../../utils/id';
 import { Badge, Button, Card, Field, InlineError, Modal, Note } from '../../components/ui';
+import { NAVIGATE_ACCOUNT_KEY } from '../../constants/navigation';
 
 function formatDate(value?: string) {
   if (!value) return '';
@@ -104,6 +105,26 @@ export function AccountsPage() {
       setSelectedAccountId(filteredAccounts[0].accountId);
     }
   }, [filteredAccounts, selectedAccountId]);
+
+  useEffect(() => {
+    function resolveNavigation(targetId: string | null | undefined) {
+      if (!targetId) return;
+      const exists = accounts.some(a => a.accountId === targetId);
+      if (exists) {
+        setSelectedAccountId(targetId);
+        window.localStorage.removeItem(NAVIGATE_ACCOUNT_KEY);
+      }
+    }
+
+    function handleNavigate(event: Event) {
+      const detail = (event as CustomEvent<{ accountId?: string }>).detail;
+      resolveNavigation(detail?.accountId);
+    }
+
+    window.addEventListener(NAVIGATE_ACCOUNT_KEY, handleNavigate as EventListener);
+    resolveNavigation(window.localStorage.getItem(NAVIGATE_ACCOUNT_KEY));
+    return () => window.removeEventListener(NAVIGATE_ACCOUNT_KEY, handleNavigate as EventListener);
+  }, [accounts]);
 
   async function refresh() {
     setLoading(true);

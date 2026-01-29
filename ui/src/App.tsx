@@ -7,6 +7,7 @@ import { JobsPage } from './features/jobs/JobsPage';
 import { BulkPage } from './features/bulk/BulkPage';
 import { HealthApi } from './api/health';
 import type { Health } from './api/types';
+import { TabContext } from './context/TabContext';
 
 const TAB_STORAGE_KEY = 'lp-active-tab';
 const TAB_QUERY_KEY = 'tab';
@@ -84,11 +85,13 @@ export default function App() {
   };
 
   return (
-    <Layout tab={tab} onTabChange={handleTabChange} health={health}>
-      {tab === 'accounts' ? <AccountsPage /> : null}
-      {tab === 'articles' ? <ArticlesPage /> : null}
-      {tab === 'jobs' ? <JobsPage /> : null}
-      {tab === 'bulk' ? <BulkPage /> : null}
-    </Layout>
+    <TabContext.Provider value={{ activeTab: tab, setTab: handleTabChange }}>
+      <Layout tab={tab} onTabChange={handleTabChange} health={health}>
+        {tab === 'accounts' ? <AccountsPage /> : null}
+        {tab === 'articles' ? <ArticlesPage /> : null}
+        {tab === 'jobs' ? <JobsPage /> : null}
+        {tab === 'bulk' ? <BulkPage /> : null}
+      </Layout>
+    </TabContext.Provider>
   );
 }

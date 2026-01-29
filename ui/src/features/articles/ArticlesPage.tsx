@@ -4,6 +4,7 @@ import { ArticlesApi } from '../../api/articles';
 import type { Article, ArticleStatus } from '../../api/types';
 import { generateArticleId } from '../../utils/id';
 import { Badge, Button, Card, Field, InlineError, InlineSuccess, Modal, Note } from '../../components/ui';
+import { NAVIGATE_ARTICLE_KEY } from '../../constants/navigation';
 
 function statusTone(status?: ArticleStatus) {
   switch (status) {
@@ -75,6 +76,26 @@ export function ArticlesPage() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    function resolveNavigation(targetId: string | null | undefined) {
+      if (!targetId) return;
+      const exists = articles.some(a => a.articleId === targetId);
+      if (exists) {
+        setSelectedArticleId(targetId);
+        window.localStorage.removeItem(NAVIGATE_ARTICLE_KEY);
+      }
+    }
+
+    function handleNavigate(event: Event) {
+      const detail = (event as CustomEvent<{ articleId?: string }>).detail;
+      resolveNavigation(detail?.articleId);
+    }
+
+    window.addEventListener(NAVIGATE_ARTICLE_KEY, handleNavigate as EventListener);
+    resolveNavigation(window.localStorage.getItem(NAVIGATE_ARTICLE_KEY));
+    return () => window.removeEventListener(NAVIGATE_ARTICLE_KEY, handleNavigate as EventListener);
+  }, [articles]);
 
   const createErrors = useMemo(() => {
     const e: Record<string, string> = {};

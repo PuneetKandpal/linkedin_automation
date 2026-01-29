@@ -44,12 +44,30 @@ export function Field(
   );
 }
 
-export function InlineError(props: { message: string }) {
-  return <div className="error">{props.message}</div>;
+export function InlineError(props: { message: string; onClose?: () => void }) {
+  return (
+    <div className="error banner">
+      <span>{props.message}</span>
+      {props.onClose ? (
+        <button type="button" className="bannerClose" onClick={props.onClose} aria-label="Dismiss error">
+          ×
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
-export function InlineSuccess(props: { message: string }) {
-  return <div className="success">{props.message}</div>;
+export function InlineSuccess(props: { message: string; onClose?: () => void }) {
+  return (
+    <div className="success banner">
+      <span>{props.message}</span>
+      {props.onClose ? (
+        <button type="button" className="bannerClose" onClick={props.onClose} aria-label="Dismiss message">
+          ×
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 export function Note(props: { text: string }) {

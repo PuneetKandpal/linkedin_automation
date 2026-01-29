@@ -195,6 +195,18 @@ export function JobsPage() {
 
   const [touched, setTouched] = useState<{ [k: string]: boolean }>({});
 
+  useEffect(() => {
+    if (!success) return;
+    const timer = window.setTimeout(() => setSuccess(null), 30_000);
+    return () => window.clearTimeout(timer);
+  }, [success]);
+
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(null), 30_000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
   const refreshAll = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -490,8 +502,8 @@ export function JobsPage() {
         }
       >
         <Note text="Scheduling requires the selected account to be linked (bootstrap) and the company page to be added under that account." />
-        {success ? <InlineSuccess message={success} /> : null}
-        {error ? <InlineError message={error} /> : null}
+        {success ? <InlineSuccess message={success} onClose={() => setSuccess(null)} /> : null}
+        {error ? <InlineError message={error} onClose={() => setError(null)} /> : null}
         {loading ? <Loader label="Refreshing…" /> : null}
         <div className="tableWrap">
           <table className="table">
@@ -510,7 +522,9 @@ export function JobsPage() {
               {sortedJobs.map(j => (
                 <tr key={j.jobId}>
                   <td>
-                    <div className="strong">{j.jobId}</div>
+                    <div className="cellStack jobCell">
+                      <span className="strong breakWord">{j.jobId}</span>
+                    </div>
                   </td>
                   <td>
                     <button type="button" className="linkButton" onClick={() => goToAccount(j.accountId)}>
@@ -528,10 +542,12 @@ export function JobsPage() {
                     )}
                   </td>
                   <td>
-                    <button type="button" className="linkButton" onClick={() => goToArticle(j.articleId)}>
-                      {articlesMap.get(j.articleId)?.title || j.articleId}
-                    </button>
-                    <div className="muted">{j.articleId}</div>
+                    <div className="cellStack articleCell">
+                      <button type="button" className="linkButton" onClick={() => goToArticle(j.articleId)}>
+                        {articlesMap.get(j.articleId)?.title || j.articleId}
+                      </button>
+                      <div className="muted breakWord">{j.articleId}</div>
+                    </div>
                   </td>
                   <td>{new Date(j.runAt).toLocaleString()}</td>
                   <td>
@@ -584,7 +600,7 @@ export function JobsPage() {
           </>
         }
       >
-        {error ? <InlineError message={error} /> : null}
+        {error ? <InlineError message={error} onClose={() => setError(null)} /> : null}
         <div className="form">
           <Field label="Account" error={touched.accountId ? formErrors.accountId : undefined}>
             <SearchSelect

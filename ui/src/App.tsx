@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import './App.css';
-import { Layout, type TabKey } from './components/layout';
+import { Layout, type TabKey, type ThemeMode } from './components/layout';
 import { AccountsPage } from './features/accounts/AccountsPage';
 import { ArticlesPage } from './features/articles/ArticlesPage';
 import { JobsPage } from './features/jobs/JobsPage';
@@ -11,6 +11,7 @@ import { TabContext } from './context/TabContext';
 
 const TAB_STORAGE_KEY = 'lp-active-tab';
 const TAB_QUERY_KEY = 'tab';
+const THEME_STORAGE_KEY = 'lp-theme-mode';
 
 function normalizeTab(value: string | null): TabKey | null {
   if (value === 'accounts' || value === 'articles' || value === 'jobs' || value === 'bulk') return value;
@@ -46,6 +47,15 @@ function getInitialTab(): TabKey {
 export default function App() {
   const [tab, setTab] = useState<TabKey>(() => getInitialTab());
   const [health, setHealth] = useState<Health | null>(null);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    if (typeof window === 'undefined') return 'system';
+    const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system';
+  });
+  const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') return 'light';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
 
   useEffect(() => {
     const onPopState = () => {
@@ -59,6 +69,22 @@ export default function App() {
   useEffect(() => {
     setTabInUrl(tab, 'replace');
   }, [tab]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = () => setSystemTheme(media.matches ? 'dark' : 'light');
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  const resolvedTheme: 'light' | 'dark' = themeMode === 'system' ? systemTheme : themeMode;
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.dataset.theme = resolvedTheme;
+  }, [resolvedTheme]);
 
   useEffect(() => {
     let mounted = true;
@@ -84,9 +110,22 @@ export default function App() {
     }
   };
 
+  const handleThemeChange = (mode: ThemeMode) => {
+    setThemeMode(mode);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(THEME_STORAGE_KEY, mode);
+    }
+  };
+
   return (
     <TabContext.Provider value={{ activeTab: tab, setTab: handleTabChange }}>
-      <Layout tab={tab} onTabChange={handleTabChange} health={health}>
+      <Layout
+        tab={tab}
+        onTabChange={handleTabChange}
+        health={health}
+        themeMode={themeMode}
+        onThemeChange={handleThemeChange}
+      >
         {tab === 'accounts' ? <AccountsPage /> : null}
         {tab === 'articles' ? <ArticlesPage /> : null}
         {tab === 'jobs' ? <JobsPage /> : null}

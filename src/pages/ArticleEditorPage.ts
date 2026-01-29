@@ -57,13 +57,13 @@ export class ArticleEditorPage extends BasePage {
     await this.waitForEditorReady();
   }
 
-  async maybeUploadCoverImage(coverImagePath?: string): Promise<void> {
+  async maybeUploadCoverImage(coverImagePath?: string): Promise<boolean> {
     const selector = this.editorSelectors.coverUploadButton;
-    if (!selector) return;
+    if (!selector) return false;
 
     if (!coverImagePath) {
       this.logger.debug('Cover upload skipped (coverImagePath not set)');
-      return;
+      return false;
     }
 
     const isUrl = this.isHttpUrl(coverImagePath);
@@ -75,15 +75,16 @@ export class ArticleEditorPage extends BasePage {
         this.logger.info('Cover image downloaded', { url: coverImagePath, localPath });
       } catch (error) {
         this.logger.warn('Cover upload skipped (failed to download URL)', { coverImagePath, error: String(error) });
-        return;
+        return false;
       }
     }
 
     if (!existsSync(localPath)) {
       this.logger.warn('Cover upload skipped (file not found)', { coverImagePath: localPath });
-      return;
+      return false;
     }
 
+    let uploaded = false;
     try {
       if (await this.isVisible(selector)) {
         this.logger.info('Uploading cover image', { selector, coverImagePath: localPath });
@@ -99,12 +100,15 @@ export class ArticleEditorPage extends BasePage {
         }
 
         await this.handleCoverModalIfPresent();
+        uploaded = true;
       } else {
         this.logger.warn('Cover upload button not visible', { selector });
       }
     } catch (error) {
       this.logger.warn('Cover upload failed, continuing', { error: String(error) });
     }
+
+    return uploaded;
   }
 
   private async handleCoverModalIfPresent(): Promise<void> {

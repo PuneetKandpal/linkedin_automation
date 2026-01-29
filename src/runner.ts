@@ -169,13 +169,17 @@ export class ArticlePublisherRunner {
       await sessionPage.ensureLoggedIn();
 
       await articleEditorPage.openNewArticle();
-      await articleEditorPage.maybeUploadCoverImage(
+      const uploadedCover = await articleEditorPage.maybeUploadCoverImage(
         article.coverImagePath
           ? /^https?:\/\//i.test(article.coverImagePath)
             ? article.coverImagePath
             : resolve(article.coverImagePath)
           : undefined
       );
+      if (uploadedCover) {
+        this.logger.info('Runner → waiting 10s after cover upload before typing title', { articleId: article.articleId });
+        await delayEngine.wait(10_000);
+      }
       await articleEditorPage.typeTitle(article.title);
       const html = markdownToLinkedInHtml(article.markdownContent || '');
       await articleEditorPage.pasteHtmlContent(html);

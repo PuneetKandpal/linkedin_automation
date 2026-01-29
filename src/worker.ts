@@ -169,9 +169,14 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
         coverImagePath: coverUrl,
       });
     }
-    await articleEditorPage.maybeUploadCoverImage(
+    const uploadedCover = await articleEditorPage.maybeUploadCoverImage(
       coverUrl && /^https?:\/\//i.test(coverUrl) ? coverUrl : undefined
     );
+
+    if (uploadedCover) {
+      logger.info('Worker → waiting 10s after cover upload before typing title', { jobId: job.jobId });
+      await delayEngine.wait(10_000);
+    }
     await articleEditorPage.typeTitle(article.title);
 
     const html = markdownToLinkedInHtml(article.markdownContent);

@@ -103,3 +103,49 @@ export function Modal(
     </div>
   );
 }
+
+export function Drawer(
+  props: PropsWithChildren<{
+    open: boolean;
+    title?: string;
+    onClose: () => void;
+    footer?: ReactNode;
+  }>
+) {
+  const { open, onClose, title, footer, children } = props;
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="drawerOverlay" onMouseDown={onClose}>
+      <div className="drawer" onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="drawerHeader">
+          <div className="drawerTitle">{title}</div>
+          <button className="drawerClose" onClick={onClose} type="button">
+            Close
+          </button>
+        </div>
+        <div className="drawerBody">{children}</div>
+        {footer ? <div className="drawerFooter">{footer}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+export function Loader(props: { label?: string }) {
+  return (
+    <div className="loaderWrap" role="status" aria-live="polite">
+      <div className="loader" />
+      <div className="loaderLabel">{props.label || 'Loading…'}</div>
+    </div>
+  );
+}

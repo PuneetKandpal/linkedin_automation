@@ -5,7 +5,7 @@ import { ArticlesApi } from '../../api/articles';
 import { JobsApi } from '../../api/jobs';
 import { ConfigApi } from '../../api/config';
 import type { Account, Article, PublishJob } from '../../api/types';
-import { Card, Field, InlineError, Button, Badge, Modal, InlineSuccess, Note } from '../../components/ui';
+import { Card, Field, InlineError, Button, Badge, Modal, InlineSuccess, Note, Drawer, Loader } from '../../components/ui';
 import { generateJobId } from '../../utils/id';
 import { TabContext } from '../../context/TabContext';
 import { NAVIGATE_ACCOUNT_KEY, NAVIGATE_ARTICLE_KEY } from '../../constants/navigation';
@@ -13,6 +13,27 @@ import { NAVIGATE_ACCOUNT_KEY, NAVIGATE_ARTICLE_KEY } from '../../constants/navi
 function toIsoFromLocal(value: string): string {
   const d = new Date(value);
   return d.toISOString();
+}
+
+function normalizeCompanyPageUrl(url?: string): string | null {
+  if (!url) return null;
+  const raw = url.trim();
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    const path = u.pathname.replace(/\/+$/, '');
+    return `${u.origin.toLowerCase()}${path.toLowerCase()}`;
+  } catch {
+    return raw.toLowerCase().replace(/\/+$/, '');
+  }
+}
+
+function companyKeyFrom(input: { companyPageUrl?: string; companyPageName?: string }): string | null {
+  const urlKey = normalizeCompanyPageUrl(input.companyPageUrl);
+  if (urlKey) return `url:${urlKey}`;
+  const name = (input.companyPageName || '').trim().toLowerCase();
+  if (name) return `name:${name}`;
+  return null;
 }
 
 type SearchOption = {
@@ -35,9 +56,10 @@ function SearchSelect(
     options: SearchOption[];
     onChange: (value: string) => void;
     onBlur?: () => void;
+    disabled?: boolean;
   }
 ) {
-  const { value, options, onChange, onBlur, placeholder } = props;
+  const { value, options, onChange, onBlur, placeholder, disabled } = props;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -45,9 +67,10 @@ function SearchSelect(
   const selected = useMemo(() => options.find(o => o.value === value) || null, [options, value]);
 
   useEffect(() => {
-    function handlePointerDown(event: PointerEvent) {
+    function handlePointerDown(event: Event) {
       if (!containerRef.current) return;
-      if (!containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node | null;
+      if (!target || !containerRef.current.contains(target)) {
         setOpen(false);
         setQuery('');
         onBlur?.();
@@ -60,10 +83,11 @@ function SearchSelect(
         onBlur?.();
       }
     }
-    window.addEventListener('pointerdown', handlePointerDown);
+    const opts: AddEventListenerOptions = { capture: true };
+    document.addEventListener('pointerdown', handlePointerDown, opts);
     window.addEventListener('keydown', handleKey);
     return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('pointerdown', handlePointerDown, opts);
       window.removeEventListener('keydown', handleKey);
     };
   }, [onBlur]);
@@ -86,13 +110,16 @@ function SearchSelect(
     <div className="searchSelect" ref={containerRef}>
       <input
         className="searchSelectInput"
+        disabled={disabled}
         value={open ? query : selected?.label ?? ''}
         placeholder={placeholder}
         onFocus={() => {
+          if (disabled) return;
           setOpen(true);
           setQuery('');
         }}
         onChange={e => {
+          if (disabled) return;
           setQuery(e.target.value);
           setOpen(true);
         }}
@@ -140,6 +167,9 @@ export function JobsPage() {
   const [failureOpen, setFailureOpen] = useState(false);
   const [failureJobId, setFailureJobId] = useState<string>('');
   const failureJob = useMemo(() => jobs.find(j => j.jobId === failureJobId) || null, [jobs, failureJobId]);
+  const sortedJobs = useMemo(() => {
+    return [...jobs].sort((a, b) => new Date(b.runAt).getTime() - new Date(a.runAt).getTime());
+  }, [jobs]);
 
   const [jobId, setJobId] = useState(generateJobId());
   const [accountId, setAccountId] = useState('');
@@ -156,6 +186,12 @@ export function JobsPage() {
   const [bulkJson, setBulkJson] = useState('');
   const [bulkMinGapAccount, setBulkMinGapAccount] = useState(20);
   const [bulkMinGapCompany, setBulkMinGapCompany] = useState(60);
+
+  const [republishConfirmOpen, setRepublishConfirmOpen] = useState(false);
+  const [republishConfirmMessage, setRepublishConfirmMessage] = useState<string>('');
+  const [republishConfirmDetail, setRepublishConfirmDetail] = useState<string>('');
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [cancelJobId, setCancelJobId] = useState<string>('');
 
   const [touched, setTouched] = useState<{ [k: string]: boolean }>({});
 
@@ -257,16 +293,31 @@ export function JobsPage() {
     return pages;
   }, [selectedAccount]);
 
-  const articleOptions = useMemo(
-    () =>
-      articles.map(a => ({
+  const selectedCompanyPageName = useMemo(() => {
+    const norm = normalizeCompanyPageUrl(companyPageUrl);
+    if (!norm) return undefined;
+    return companyPageOptions.find(p => normalizeCompanyPageUrl(p.url) === norm)?.name;
+  }, [companyPageOptions, companyPageUrl]);
+
+  const articleOptions = useMemo(() => {
+    const selectedCompanyKey = companyKeyFrom({ companyPageUrl, companyPageName: selectedCompanyPageName });
+    return articles.map(a => {
+      const publishedCompanyKey = companyKeyFrom({
+        companyPageUrl: a.publishedFromCompanyPageUrl,
+        companyPageName: a.publishedFromCompanyPageName,
+      });
+      const isPublishedHere =
+        a.status === 'published' &&
+        Boolean(selectedCompanyKey && publishedCompanyKey && selectedCompanyKey === publishedCompanyKey);
+
+      return {
         value: a.articleId,
         label: `${a.title} (${a.articleId})`,
         disabled: a.status === 'draft',
-        note: a.status === 'draft' ? 'Draft' : undefined,
-      })),
-    [articles]
-  );
+        note: a.status === 'draft' ? 'Draft' : isPublishedHere ? 'Published here' : undefined,
+      };
+    });
+  }, [articles, companyPageUrl, selectedCompanyPageName]);
 
   const formErrors = useMemo(() => {
     const e: Record<string, string> = {};
@@ -281,6 +332,19 @@ export function JobsPage() {
   }, [accountId, articleId, jobId, runAtLocal, companyPageUrl, delayProfile, typingProfile]);
 
   const canSubmit = Object.keys(formErrors).length === 0;
+
+  const selectedArticle = useMemo(() => articlesMap.get(articleId) || null, [articlesMap, articleId]);
+
+  const publishedHere = useMemo(() => {
+    const art = selectedArticle;
+    if (!art || art.status !== 'published') return false;
+    const selectedCompanyKey = companyKeyFrom({ companyPageUrl, companyPageName: selectedCompanyPageName });
+    const publishedCompanyKey = companyKeyFrom({
+      companyPageUrl: art.publishedFromCompanyPageUrl,
+      companyPageName: art.publishedFromCompanyPageName,
+    });
+    return Boolean(selectedCompanyKey && publishedCompanyKey && selectedCompanyKey === publishedCompanyKey);
+  }, [companyPageUrl, selectedArticle, selectedCompanyPageName]);
 
   const goToAccount = useCallback(
     (targetAccountId: string) => {
@@ -331,7 +395,7 @@ export function JobsPage() {
     setBulkOpen(true);
   }
 
-  async function createJob() {
+  async function doCreateJob() {
     setError(null);
     setSuccess(null);
     setTouched({ jobId: true, accountId: true, articleId: true, runAtLocal: true, delayProfile: true, typingProfile: true });
@@ -345,6 +409,7 @@ export function JobsPage() {
         delayProfile,
         typingProfile,
         companyPageUrl,
+        companyPageName: selectedCompanyPageName,
       });
       setJobId(generateJobId());
       await refreshAll();
@@ -353,6 +418,35 @@ export function JobsPage() {
     } catch (e) {
       setError((e as ApiError).message || String(e));
     }
+  }
+
+  async function createJob() {
+    const art = selectedArticle;
+    if (art?.status === 'published') {
+      const selectedCompanyKey = companyKeyFrom({ companyPageUrl, companyPageName: selectedCompanyPageName });
+      const publishedCompanyKey = companyKeyFrom({
+        companyPageUrl: art.publishedFromCompanyPageUrl,
+        companyPageName: art.publishedFromCompanyPageName,
+      });
+
+      const publishedOn = art.publishedFromCompanyPageName || art.publishedFromCompanyPageUrl || 'a company page';
+      const targetOn = companyPageOptions.find(p => normalizeCompanyPageUrl(p.url) === normalizeCompanyPageUrl(companyPageUrl))?.name
+        || companyPageUrl
+        || 'the selected company page';
+
+      if (selectedCompanyKey && publishedCompanyKey && selectedCompanyKey === publishedCompanyKey) {
+        setRepublishConfirmMessage(`This article is already published on ${publishedOn}.`);
+        setRepublishConfirmDetail(`Do you want to re-publish it again on ${targetOn}?`);
+      } else {
+        setRepublishConfirmMessage('This article is already published.');
+        setRepublishConfirmDetail('Do you want to schedule it again for publishing?');
+      }
+
+      setRepublishConfirmOpen(true);
+      return;
+    }
+
+    await doCreateJob();
   }
 
   async function cancelJob(id: string) {
@@ -365,6 +459,11 @@ export function JobsPage() {
     } catch (e) {
       setError((e as ApiError).message || String(e));
     }
+  }
+
+  function requestCancel(job: PublishJob) {
+    setCancelJobId(job.jobId);
+    setCancelConfirmOpen(true);
   }
 
   function openFailure(job: PublishJob) {
@@ -390,8 +489,10 @@ export function JobsPage() {
           </div>
         }
       >
+        <Note text="Scheduling requires the selected account to be linked (bootstrap) and the company page to be added under that account." />
         {success ? <InlineSuccess message={success} /> : null}
         {error ? <InlineError message={error} /> : null}
+        {loading ? <Loader label="Refreshing…" /> : null}
         <div className="tableWrap">
           <table className="table">
             <thead>
@@ -406,7 +507,7 @@ export function JobsPage() {
               </tr>
             </thead>
             <tbody>
-              {jobs.map(j => (
+              {sortedJobs.map(j => (
                 <tr key={j.jobId}>
                   <td>
                     <div className="strong">{j.jobId}</div>
@@ -455,7 +556,7 @@ export function JobsPage() {
                         </Button>
                       ) : null}
                       {j.status === 'pending' ? (
-                        <Button variant="ghost" onClick={() => void cancelJob(j.jobId)}>
+                        <Button variant="ghost" onClick={() => requestCancel(j)}>
                           Cancel
                         </Button>
                       ) : null}
@@ -466,10 +567,9 @@ export function JobsPage() {
             </tbody>
           </table>
         </div>
-        <Note text="Scheduling requires the selected account to be linked (bootstrap) and the company page to be added under that account." />
       </Card>
 
-      <Modal
+      <Drawer
         open={scheduleOpen}
         title="Schedule Publish Job"
         onClose={() => setScheduleOpen(false)}
@@ -485,26 +585,17 @@ export function JobsPage() {
         }
       >
         {error ? <InlineError message={error} /> : null}
-        <div className="form twoCols">
-          <Field label="Job ID" error={touched.jobId ? formErrors.jobId : undefined}>
-            <div className="inputWithButton">
-              <input
-                value={jobId}
-                onChange={e => setJobId(e.target.value)}
-                onBlur={() => setTouched(t => ({ ...t, jobId: true }))}
-              />
-              <Button variant="ghost" onClick={() => setJobId(generateJobId())}>
-                Generate
-              </Button>
-            </div>
-          </Field>
-
+        <div className="form">
           <Field label="Account" error={touched.accountId ? formErrors.accountId : undefined}>
             <SearchSelect
               value={accountId}
               options={accountOptions}
               placeholder="Search account…"
-              onChange={setAccountId}
+              onChange={value => {
+                setAccountId(value);
+                setCompanyPageUrl('');
+                setArticleId('');
+              }}
               onBlur={() => setTouched(t => ({ ...t, accountId: true }))}
             />
           </Field>
@@ -512,8 +603,12 @@ export function JobsPage() {
           <Field label="Company page" error={touched.companyPageUrl ? formErrors.companyPageUrl : undefined}>
             <select
               value={companyPageUrl}
-              onChange={e => setCompanyPageUrl(e.target.value)}
+              onChange={e => {
+                setCompanyPageUrl(e.target.value);
+                setArticleId('');
+              }}
               onBlur={() => setTouched(t => ({ ...t, companyPageUrl: true }))}
+              disabled={!accountId}
             >
               <option value="">Select…</option>
               {companyPageOptions.map(p => (
@@ -527,11 +622,13 @@ export function JobsPage() {
           <Field label="Article" error={touched.articleId ? formErrors.articleId : undefined}>
             <SearchSelect
               value={articleId}
-              options={articleOptions}
-              placeholder="Search article…"
+              options={companyPageUrl ? articleOptions : []}
+              placeholder={!companyPageUrl ? 'Select company page first…' : 'Search article…'}
               onChange={setArticleId}
               onBlur={() => setTouched(t => ({ ...t, articleId: true }))}
+              disabled={!companyPageUrl}
             />
+            {publishedHere ? <div style={{ marginTop: 8 }}><span className="chip">Published here</span></div> : null}
           </Field>
 
           <Field label="Run At" error={touched.runAtLocal ? formErrors.runAtLocal : undefined}>
@@ -540,6 +637,7 @@ export function JobsPage() {
               value={runAtLocal}
               onChange={e => setRunAtLocal(e.target.value)}
               onBlur={() => setTouched(t => ({ ...t, runAtLocal: true }))}
+              disabled={!articleId}
             />
           </Field>
 
@@ -548,7 +646,7 @@ export function JobsPage() {
               value={delayProfile}
               onChange={e => setDelayProfile(e.target.value)}
               onBlur={() => setTouched(t => ({ ...t, delayProfile: true }))}
-              disabled={delayProfiles.length === 0}
+              disabled={delayProfiles.length === 0 || !articleId}
             >
               <option value="" disabled>
                 {delayProfiles.length === 0 ? 'No profiles' : 'Select delay profile'}
@@ -565,7 +663,7 @@ export function JobsPage() {
               value={typingProfile}
               onChange={e => setTypingProfile(e.target.value)}
               onBlur={() => setTouched(t => ({ ...t, typingProfile: true }))}
-              disabled={typingProfiles.length === 0}
+              disabled={typingProfiles.length === 0 || !articleId}
             >
               <option value="" disabled>
                 {typingProfiles.length === 0 ? 'No profiles' : 'Select typing profile'}
@@ -577,6 +675,46 @@ export function JobsPage() {
               ))}
             </select>
           </Field>
+
+          <Field label="Job ID" error={touched.jobId ? formErrors.jobId : undefined}>
+            <div className="inputWithButton">
+              <input
+                value={jobId}
+                onChange={e => setJobId(e.target.value)}
+                onBlur={() => setTouched(t => ({ ...t, jobId: true }))}
+                disabled={!articleId}
+              />
+              <Button variant="ghost" onClick={() => setJobId(generateJobId())} disabled={!articleId}>
+                Generate
+              </Button>
+            </div>
+          </Field>
+        </div>
+      </Drawer>
+
+      <Modal
+        open={republishConfirmOpen}
+        title="Confirm re-publish"
+        onClose={() => setRepublishConfirmOpen(false)}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setRepublishConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setRepublishConfirmOpen(false);
+                void doCreateJob();
+              }}
+            >
+              Re-publish
+            </Button>
+          </>
+        }
+      >
+        <Note text={republishConfirmMessage} />
+        <div className="muted" style={{ marginTop: 8 }}>
+          {republishConfirmDetail}
         </div>
       </Modal>
 
@@ -624,8 +762,33 @@ export function JobsPage() {
       </Modal>
 
       <Modal
+        open={cancelConfirmOpen}
+        title="Cancel publish job?"
+        onClose={() => setCancelConfirmOpen(false)}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCancelConfirmOpen(false)}>
+              Keep job
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setCancelConfirmOpen(false);
+                if (cancelJobId) void cancelJob(cancelJobId);
+              }}
+            >
+              Cancel job
+            </Button>
+          </>
+        }
+      >
+        <p className="strong">Job ID: {cancelJobId}</p>
+        <p className="muted" style={{ marginTop: 8 }}>This job will no longer run. This cannot be undone.</p>
+      </Modal>
+
+      <Modal
         open={failureOpen}
-        title={failureJob ? `Failure: ${failureJob.jobId}` : 'Failure'}
+        title={failureJob ? `Failure: ${failureJob.jobId}` : 'Job failure'}
         onClose={() => setFailureOpen(false)}
         footer={
           <Button variant="ghost" onClick={() => setFailureOpen(false)}>

@@ -3,7 +3,7 @@ import type { ApiError } from '../../api/http';
 import { ArticlesApi } from '../../api/articles';
 import type { Article, ArticleStatus } from '../../api/types';
 import { generateArticleId } from '../../utils/id';
-import { Badge, Button, Card, Field, InlineError, InlineSuccess, Modal, Note } from '../../components/ui';
+import { Badge, Button, Card, Field, InlineError, InlineSuccess, Modal, Note, Loader } from '../../components/ui';
 import { NAVIGATE_ARTICLE_KEY } from '../../constants/navigation';
 
 function statusTone(status?: ArticleStatus) {
@@ -211,6 +211,7 @@ export function ArticlesPage() {
 
   return (
     <div className="articlesLayout">
+      {loading ? <Loader label="Loading articles…" /> : null}
       <Card
         title="Articles"
         right={

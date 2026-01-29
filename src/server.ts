@@ -717,7 +717,9 @@ async function main() {
 
     const article = (await ArticleModel.findOne({ articleId }).lean()) as ArticleDoc | null;
     if (!article) return res.status(404).json({ error: 'Article not found' });
-    if (article.status !== 'ready') return res.status(400).json({ error: 'Article must be ready before scheduling' });
+    if (article.status !== 'ready' && article.status !== 'published') {
+      return res.status(400).json({ error: 'Article must be ready or published before scheduling' });
+    }
     if (!article.markdownContent || article.markdownContent.trim().length === 0) {
       return res.status(400).json({ error: 'Article markdownContent is empty' });
     }

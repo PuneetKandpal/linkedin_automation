@@ -3,7 +3,7 @@ import type { ApiError } from '../../api/http';
 import { AccountsApi } from '../../api/accounts';
 import type { Account, AccountIssue, CompanyPage } from '../../api/types';
 import { generateAccountId } from '../../utils/id';
-import { Badge, Button, Card, Field, InlineError, Modal, Note } from '../../components/ui';
+import { Badge, Button, Card, Field, InlineError, Modal, Note, Loader } from '../../components/ui';
 import { NAVIGATE_ACCOUNT_KEY } from '../../constants/navigation';
 
 function formatDate(value?: string) {
@@ -291,6 +291,7 @@ export function AccountsPage() {
 
   return (
     <div className="accountsPage">
+      {loading ? <Loader label="Loading accounts…" /> : null}
       <section className="overviewGrid">
         <div className="statCard">
           <div className="muted">Accounts</div>

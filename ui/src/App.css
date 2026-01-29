@@ -534,17 +534,118 @@
   background: rgba(15, 23, 42, 0.02);
  }
 
+ .drawerOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.45);
+  display: flex;
+  justify-content: flex-end;
+  align-items: stretch;
+  padding: 0;
+  z-index: 60;
+ }
+
+ .drawer {
+  width: min(560px, 96vw);
+  height: 100vh;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -24px 0 60px rgba(15, 23, 42, 0.25);
+ }
+
+ .drawerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+ }
+
+ .drawerTitle {
+  font-weight: 800;
+ }
+
+ .drawerClose {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+ }
+
+ .drawerBody {
+  padding: 18px;
+  overflow: auto;
+  flex: 1;
+ }
+
+ .drawerFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.02);
+ }
+
+ .loaderWrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--panel-muted);
+  color: var(--muted);
+ }
+
+ .loader {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid rgba(148, 163, 184, 0.45);
+  border-top-color: var(--brand);
+  animation: spin 0.9s linear infinite;
+ }
+
+ .loaderLabel {
+  font-weight: 600;
+ }
+
+ @keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+ }
+
+ .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(59, 130, 246, 0.08);
+  color: #1d4ed8;
+ }
+
  .badge {
-   display: inline-block;
-   font-size: 12px;
-   padding: 4px 10px;
+  display: inline-block;
+  font-size: 12px;
+  padding: 4px 10px;
    border-radius: 999px;
    border: 1px solid transparent;
  }
 
  .badge-neutral {
-   background: var(--panel-muted);
-   border-color: var(--border);
+  background: var(--panel-muted);
+  border-color: var(--border);
  }
 
  .badge-ok {

@@ -4,7 +4,7 @@ import type { ApiError } from '../../api/http';
 import { AccountsApi, type CreateAccountInput } from '../../api/accounts';
 import { ArticlesApi, type CreateArticleInput } from '../../api/articles';
 import { JobsApi, type BulkJobItem } from '../../api/jobs';
-import { Badge, Button, Card, Field, InlineError, InlineSuccess, Modal, Note } from '../../components/ui';
+import { Badge, Button, Card, Field, InlineError, InlineSuccess, Modal, Note, Loader } from '../../components/ui';
 
 type Mode = 'accounts' | 'articles' | 'schedule';
 
@@ -391,6 +391,7 @@ export function BulkPage() {
 
   return (
     <div className="bulkLayout">
+      {loading ? <Loader label="Working…" /> : null}
       <Card title="Bulk (Excel Upload)">
         {success ? <InlineSuccess message={success} /> : null}
         {error ? <InlineError message={error} /> : null}

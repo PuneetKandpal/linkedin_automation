@@ -80,6 +80,36 @@
    gap: 10px;
  }
 
+ .filePicker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  background: var(--panel-muted);
+}
+
+.filePickerButton {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--brand);
+  color: #fff;
+  transition: transform 0.1s ease;
+}
+
+.filePickerButton:active {
+  transform: scale(0.98);
+}
+
+.filePickerName {
+  color: var(--muted);
+  font-size: 14px;
+}
+
  .card {
    background: var(--panel);
    border: 1px solid var(--border);

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import type { ApiError } from '../../api/http';
 import { AccountsApi, type CreateAccountInput } from '../../api/accounts';
@@ -219,6 +219,7 @@ export function BulkPage() {
   const [parsedCount, setParsedCount] = useState(0);
   const [rowErrors, setRowErrors] = useState<RowError[]>([]);
   const [hasImported, setHasImported] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [errorModalOpen, setErrorModalOpen] = useState(false);
   const [errorModalRow, setErrorModalRow] = useState<number | null>(null);
@@ -262,6 +263,14 @@ export function BulkPage() {
     setRowErrors([]);
     setParsedCount(0);
     setHasImported(false);
+  }
+
+  function clearFileSelection() {
+    setFile(null);
+    resetPreviewState();
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   }
 
   async function loadPreview(nextFile: File) {
@@ -310,6 +319,7 @@ export function BulkPage() {
         }
         const resp = await AccountsApi.bulkCreate(result.items);
         setSuccess(`Created ${resp.accountIds.length} accounts`);
+        clearFileSelection();
         return;
       }
 
@@ -326,6 +336,7 @@ export function BulkPage() {
           await ArticlesApi.bulkMarkReady(resp.articleIds);
         }
         setSuccess(`Created ${resp.articleIds.length} articles${markReady ? ' and marked ready' : ''}`);
+        clearFileSelection();
         return;
       }
 
@@ -346,6 +357,7 @@ export function BulkPage() {
       });
 
       setSuccess(`Scheduled ${resp.jobIds.length} jobs`);
+      clearFileSelection();
     } catch (e) {
       setError((e as ApiError).message || String(e));
     } finally {
@@ -418,14 +430,21 @@ export function BulkPage() {
           ) : null}
 
           <Field label="Spreadsheet file (.xlsx or .csv)">
+            <div className="filePicker">
+              <button type="button" className="filePickerButton" onClick={() => fileInputRef.current?.click()}>
+                Choose file
+              </button>
+              <span className="filePickerName">{file ? file.name : 'No file selected'}</span>
+            </div>
             <input
+              ref={fileInputRef}
               type="file"
               accept=".xlsx,.csv"
+              style={{ display: 'none' }}
               onChange={e => {
                 const f = e.target.files?.[0] ?? null;
                 if (!f) {
-                  setFile(null);
-                  resetPreviewState();
+                  clearFileSelection();
                   return;
                 }
                 void loadPreview(f);

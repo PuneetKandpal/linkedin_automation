@@ -68,6 +68,12 @@
    }
  }
 
+ .bulkLayout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+ }
+
  .row {
    display: flex;
    align-items: center;

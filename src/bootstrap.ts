@@ -43,11 +43,6 @@ async function promptValue(
   }
 }
 
-function normalizeBool(value: string): boolean {
-  const v = value.trim().toLowerCase();
-  return v === 'y' || v === 'yes' || v === 'true' || v === '1';
-}
-
 async function main() {
   const rl = createInterface({ input, output });
   try {
@@ -110,41 +105,10 @@ async function main() {
     const proxyUsernameArg = getArgValue('--proxy-username') || process.env.PROXY_USERNAME;
     const proxyPasswordArg = getArgValue('--proxy-password') || process.env.PROXY_PASSWORD;
 
-    let proxyServer: string | undefined = proxyServerArg || existing?.proxy?.server || undefined;
-    let proxyUsername: string | undefined = proxyUsernameArg || existing?.proxy?.username || undefined;
-    let proxyPassword: string | undefined = proxyPasswordArg || existing?.proxy?.password || undefined;
-
-    if (!proxyServerArg) {
-      const wantsProxyRaw = await promptValue(rl, 'Use proxy? (y/N)', {
-        defaultValue: proxyServer ? 'Y' : 'N',
-        required: false,
-        allowEmpty: true,
-      });
-      const wantsProxy = normalizeBool(wantsProxyRaw || '');
-
-      if (!wantsProxy) {
-        proxyServer = undefined;
-        proxyUsername = undefined;
-        proxyPassword = undefined;
-      } else {
-        proxyServer = await promptValue(rl, 'Proxy server (e.g. http://host:port)', {
-          defaultValue: proxyServer,
-          required: true,
-        });
-        const u = await promptValue(rl, 'Proxy username (optional)', {
-          defaultValue: proxyUsername,
-          required: false,
-          allowEmpty: true,
-        });
-        const p = await promptValue(rl, 'Proxy password (optional)', {
-          defaultValue: proxyPassword,
-          required: false,
-          allowEmpty: true,
-        });
-        proxyUsername = u.trim().length > 0 ? u : undefined;
-        proxyPassword = p.trim().length > 0 ? p : undefined;
-      }
-    }
+    const proxyConfigProvided = Boolean(proxyServerArg);
+    const proxyServer: string | undefined = proxyConfigProvided ? proxyServerArg : undefined;
+    const proxyUsername: string | undefined = proxyConfigProvided ? proxyUsernameArg : undefined;
+    const proxyPassword: string | undefined = proxyConfigProvided ? proxyPasswordArg : undefined;
 
     const account = await AccountModel.findOneAndUpdate(
       { accountId },

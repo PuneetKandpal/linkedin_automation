@@ -3,6 +3,7 @@ import type { ApiError } from '../../api/http';
 import { AccountsApi } from '../../api/accounts';
 import { ArticlesApi } from '../../api/articles';
 import { JobsApi } from '../../api/jobs';
+import { ConfigApi } from '../../api/config';
 import type { Account, Article, PublishJob } from '../../api/types';
 import { Card, Field, InlineError, Button, Badge, Modal, InlineSuccess, Note } from '../../components/ui';
 import { generateJobId } from '../../utils/id';
@@ -145,6 +146,9 @@ export function JobsPage() {
   const [typingProfile, setTypingProfile] = useState('medium');
   const [companyPageUrl, setCompanyPageUrl] = useState('');
 
+  const [delayProfiles, setDelayProfiles] = useState<string[]>([]);
+  const [typingProfiles, setTypingProfiles] = useState<string[]>([]);
+
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkJson, setBulkJson] = useState('');
   const [bulkMinGapAccount, setBulkMinGapAccount] = useState(20);
@@ -157,10 +161,22 @@ export function JobsPage() {
     setError(null);
     setSuccess(null);
     try {
-      const [j, a, art] = await Promise.all([JobsApi.list(), AccountsApi.list(), ArticlesApi.list()]);
+      const [j, a, art, cfg] = await Promise.all([JobsApi.list(), AccountsApi.list(), ArticlesApi.list(), ConfigApi.profiles()]);
       setJobs(j);
       setAccounts(a);
       setArticles(art);
+      setDelayProfiles(cfg.delayProfiles);
+      setTypingProfiles(cfg.typingProfiles);
+      if (cfg.delayProfiles.length > 0) {
+        setDelayProfile(prev => (cfg.delayProfiles.includes(prev) ? prev : cfg.delayProfiles[0]));
+      } else {
+        setDelayProfile('');
+      }
+      if (cfg.typingProfiles.length > 0) {
+        setTypingProfile(prev => (cfg.typingProfiles.includes(prev) ? prev : cfg.typingProfiles[0]));
+      } else {
+        setTypingProfile('');
+      }
       setAccountId(prev => prev || (a[0]?.accountId ?? ''));
       setArticleId(prev => prev || (art[0]?.articleId ?? ''));
     } catch (e) {
@@ -244,16 +260,18 @@ export function JobsPage() {
     if (!articleId) e.articleId = 'Select an article';
     if (!runAtLocal) e.runAtLocal = 'Run At is required';
     if (!companyPageUrl) e.companyPageUrl = 'Select a company page';
+    if (!delayProfile) e.delayProfile = 'Select a delay profile';
+    if (!typingProfile) e.typingProfile = 'Select a typing profile';
     return e;
-  }, [accountId, articleId, jobId, runAtLocal, companyPageUrl]);
+  }, [accountId, articleId, jobId, runAtLocal, companyPageUrl, delayProfile, typingProfile]);
 
   const canSubmit = Object.keys(formErrors).length === 0;
 
   function openSchedule() {
     setJobId(generateJobId());
     setRunAtLocal(defaultLocalDateTime(10));
-    setDelayProfile('default');
-    setTypingProfile('medium');
+    setDelayProfile(delayProfiles.includes('default') ? 'default' : delayProfiles[0] ?? '');
+    setTypingProfile(typingProfiles.includes('medium') ? 'medium' : typingProfiles[0] ?? '');
     setCompanyPageUrl('');
     setTouched({});
     setError(null);
@@ -469,11 +487,39 @@ export function JobsPage() {
             />
           </Field>
 
-          <Field label="Delay Profile">
-            <input value={delayProfile} onChange={e => setDelayProfile(e.target.value)} />
+          <Field label="Delay Profile" error={touched.delayProfile ? formErrors.delayProfile : undefined}>
+            <select
+              value={delayProfile}
+              onChange={e => setDelayProfile(e.target.value)}
+              onBlur={() => setTouched(t => ({ ...t, delayProfile: true }))}
+              disabled={delayProfiles.length === 0}
+            >
+              <option value="" disabled>
+                {delayProfiles.length === 0 ? 'No profiles' : 'Select delay profile'}
+              </option>
+              {delayProfiles.map(profile => (
+                <option key={profile} value={profile}>
+                  {profile}
+                </option>
+              ))}
+            </select>
           </Field>
-          <Field label="Typing Profile">
-            <input value={typingProfile} onChange={e => setTypingProfile(e.target.value)} />
+          <Field label="Typing Profile" error={touched.typingProfile ? formErrors.typingProfile : undefined}>
+            <select
+              value={typingProfile}
+              onChange={e => setTypingProfile(e.target.value)}
+              onBlur={() => setTouched(t => ({ ...t, typingProfile: true }))}
+              disabled={typingProfiles.length === 0}
+            >
+              <option value="" disabled>
+                {typingProfiles.length === 0 ? 'No profiles' : 'Select typing profile'}
+              </option>
+              {typingProfiles.map(profile => (
+                <option key={profile} value={profile}>
+                  {profile}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
       </Modal>

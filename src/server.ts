@@ -95,6 +95,13 @@ async function main() {
     return res.json({ ok: true });
   });
 
+  app.get('/config/profiles', (req: Request, res: Response) => {
+    void req;
+    const delayProfiles = Object.keys(staticCfg.delays).sort();
+    const typingProfiles = Object.keys(staticCfg.typingProfiles).sort();
+    return res.json({ delayProfiles, typingProfiles });
+  });
+
   app.get('/accounts', asyncHandler(async (req: Request, res: Response) => {
     void req;
     const accounts = await AccountModel.find({}, { storageStateEnc: 0 }).lean();

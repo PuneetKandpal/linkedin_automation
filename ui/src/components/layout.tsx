@@ -1,7 +1,7 @@
 import type { PropsWithChildren } from 'react';
 import { Badge } from './ui';
 
-export type TabKey = 'accounts' | 'articles' | 'jobs' | 'bulk';
+export type TabKey = 'accounts' | 'articles' | 'jobs' | 'bulk' | 'autoSchedule';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 export function Layout(
@@ -53,6 +53,9 @@ export function Layout(
           </button>
           <button className={props.tab === 'bulk' ? 'tab active' : 'tab'} onClick={() => props.onTabChange('bulk')}>
             Bulk (Excel)
+          </button>
+          <button className={props.tab === 'autoSchedule' ? 'tab active' : 'tab'} onClick={() => props.onTabChange('autoSchedule')}>
+            Auto-Schedule
           </button>
         </nav>
       </header>

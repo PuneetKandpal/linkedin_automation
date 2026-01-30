@@ -5,6 +5,7 @@ import { AccountsPage } from './features/accounts/AccountsPage';
 import { ArticlesPage } from './features/articles/ArticlesPage';
 import { JobsPage } from './features/jobs/JobsPage';
 import { BulkPage } from './features/bulk/BulkPage';
+import { AutoSchedulePage } from './features/autoSchedule/AutoSchedulePage';
 import { HealthApi } from './api/health';
 import type { Health } from './api/types';
 import { TabContext } from './context/TabContext';
@@ -14,7 +15,7 @@ const TAB_QUERY_KEY = 'tab';
 const THEME_STORAGE_KEY = 'lp-theme-mode';
 
 function normalizeTab(value: string | null): TabKey | null {
-  if (value === 'accounts' || value === 'articles' || value === 'jobs' || value === 'bulk') return value;
+  if (value === 'accounts' || value === 'articles' || value === 'jobs' || value === 'bulk' || value === 'autoSchedule') return value;
   return null;
 }
 
@@ -130,6 +131,7 @@ export default function App() {
         {tab === 'articles' ? <ArticlesPage /> : null}
         {tab === 'jobs' ? <JobsPage /> : null}
         {tab === 'bulk' ? <BulkPage /> : null}
+        {tab === 'autoSchedule' ? <AutoSchedulePage /> : null}
       </Layout>
     </TabContext.Provider>
   );

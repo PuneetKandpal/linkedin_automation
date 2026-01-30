@@ -4,6 +4,8 @@ import type { ApiError } from '../../api/http';
 import { AccountsApi, type CreateAccountInput } from '../../api/accounts';
 import { ArticlesApi, type CreateArticleInput } from '../../api/articles';
 import { JobsApi, type BulkJobItem } from '../../api/jobs';
+import { AutoScheduleApi } from '../../api/autoSchedule';
+import type { AutoScheduleConfigUpdate, AutoScheduleResult } from '../../api/autoSchedule';
 import { Badge, Button, Card, Field, InlineError, InlineSuccess, Modal, Note, Loader } from '../../components/ui';
 
 type Mode = 'accounts' | 'articles' | 'schedule';
@@ -22,6 +24,17 @@ type RowPreview = {
   row: number;
   data: Record<string, unknown>;
 };
+
+function defaultLocalDateTime(offsetMinutes: number): string {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() + offsetMinutes);
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
 
 function pickCell(row: Record<string, unknown>, ...keys: string[]): unknown {
   for (const key of keys) {
@@ -214,6 +227,12 @@ export function BulkPage() {
   const [minGapCompany, setMinGapCompany] = useState(60);
 
   const [markReady, setMarkReady] = useState(true);
+  const [autoSchedule, setAutoSchedule] = useState(false);
+  const [scheduleStartFrom, setScheduleStartFrom] = useState<string>('');
+  const [scheduleOverride, setScheduleOverride] = useState<AutoScheduleConfigUpdate>({});
+  const [scheduleDefaultsLoaded, setScheduleDefaultsLoaded] = useState(false);
+  const [scheduleEstimate, setScheduleEstimate] = useState<AutoScheduleResult | null>(null);
+  const [scheduleEstimateLoading, setScheduleEstimateLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -339,7 +358,34 @@ export function BulkPage() {
         if (markReady && resp.articleIds.length > 0) {
           await ArticlesApi.bulkMarkReady(resp.articleIds);
         }
-        setSuccess(`Created ${resp.articleIds.length} articles${markReady ? ' and marked ready' : ''}`);
+
+        let autoScheduleResult: AutoScheduleResult | null = null;
+        if (autoSchedule && resp.articleIds.length > 0) {
+          try {
+            if (!markReady) {
+              await ArticlesApi.bulkMarkReady(resp.articleIds);
+            }
+            const startIso = scheduleStartFrom ? new Date(scheduleStartFrom).toISOString() : undefined;
+            autoScheduleResult = await AutoScheduleApi.execute({
+              articleIds: resp.articleIds,
+              startFromDate: startIso,
+              configOverride: scheduleOverride,
+            });
+          } catch (e) {
+            setError(`Articles created but auto-schedule failed: ${(e as ApiError).message || String(e)}`);
+            clearFileSelection();
+            return;
+          }
+        }
+
+        const finishText = autoScheduleResult?.estimatedFinishAt
+          ? ` (est. finish: ${new Date(autoScheduleResult.estimatedFinishAt).toLocaleString()})`
+          : '';
+
+        const successMsg = autoScheduleResult
+          ? `Created ${resp.articleIds.length} articles${markReady ? ', marked ready,' : ''} and scheduled ${autoScheduleResult.scheduled} publish job${autoScheduleResult.scheduled === 1 ? '' : 's'}${finishText}`
+          : `Created ${resp.articleIds.length} articles${markReady ? ' and marked ready' : ''}`;
+        setSuccess(successMsg);
         clearFileSelection();
         return;
       }
@@ -372,6 +418,29 @@ export function BulkPage() {
   function handleUploadRequest() {
     if (!file || !hasImported) return;
     setConfirmHasErrors(hasAnyErrors);
+    if (mode === 'articles') {
+      setScheduleEstimate(null);
+      setScheduleEstimateLoading(false);
+      if (!scheduleDefaultsLoaded) {
+        void (async () => {
+          try {
+            const cfg = await AutoScheduleApi.getConfig();
+            setScheduleOverride({
+              maxArticlesPerCompanyPage: cfg.maxArticlesPerCompanyPage,
+              minGapMinutesSameCompanyPage: cfg.minGapMinutesSameCompanyPage,
+              minGapMinutesCompanyPagesSameAccount: cfg.minGapMinutesCompanyPagesSameAccount,
+              minGapMinutesAcrossAccounts: cfg.minGapMinutesAcrossAccounts,
+              estimatedPublishDurationMinutes: cfg.estimatedPublishDurationMinutes,
+              jitterMinutes: cfg.jitterMinutes,
+            });
+            setScheduleStartFrom(defaultLocalDateTime(cfg.defaultStartOffsetMinutes));
+            setScheduleDefaultsLoaded(true);
+          } catch {
+            // ignore
+          }
+        })();
+      }
+    }
     setConfirmModalOpen(true);
   }
 
@@ -415,21 +484,7 @@ export function BulkPage() {
 
           <Note text={help} />
 
-          {mode === 'articles' ? (
-            <Field label="After import">
-              <div className="toggleSwitch">
-                <button
-                  type="button"
-                  className={`toggleButton${markReady ? ' active' : ''}`}
-                  aria-pressed={markReady}
-                  onClick={() => setMarkReady(prev => !prev)}
-                >
-                  <span className="srOnly">Toggle mark ready</span>
-                </button>
-                <span className="toggleLabel">Mark imported articles as ready</span>
-              </div>
-            </Field>
-          ) : null}
+          {mode === 'articles' ? null : null}
 
           {mode === 'schedule' ? (
             <div className="form twoCols">
@@ -545,7 +600,13 @@ export function BulkPage() {
 
       <Modal
         open={confirmModalOpen}
-        title={confirmHasErrors ? 'Skip error rows?' : 'Confirm upload'}
+        title={
+          mode === 'articles'
+            ? 'Upload articles'
+            : confirmHasErrors
+              ? 'Skip error rows?'
+              : 'Confirm upload'
+        }
         onClose={() => setConfirmModalOpen(false)}
         footer={
           <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
@@ -557,12 +618,182 @@ export function BulkPage() {
               onClick={() => void handleConfirmUpload(confirmHasErrors)}
               disabled={loading}
             >
-              {confirmHasErrors ? 'Skip & Upload' : 'Upload'}
+              {mode === 'articles'
+                ? autoSchedule
+                  ? (confirmHasErrors ? 'Skip errors & Upload + Schedule' : 'Upload & Schedule')
+                  : (confirmHasErrors ? 'Skip errors & Upload' : 'Upload')
+                : (confirmHasErrors ? 'Skip & Upload' : 'Upload')}
             </Button>
           </div>
         }
       >
-        {confirmHasErrors ? (
+        {mode === 'articles' ? (
+          <div className="form">
+            {confirmHasErrors ? (
+              <p>
+                There are {errorRowCount} row{errorRowCount === 1 ? '' : 's'} with validation errors. You can skip them
+                and upload the remaining {parsedCount} valid row{parsedCount === 1 ? '' : 's'}.
+              </p>
+            ) : (
+              <p>
+                Upload {parsedCount} article{parsedCount === 1 ? '' : 's'} now?
+              </p>
+            )}
+
+            <Field label="Action">
+              <select
+                className="selectFancy"
+                value={autoSchedule ? 'uploadAndSchedule' : 'upload'}
+                onChange={e => {
+                  const next = e.target.value;
+                  if (next === 'uploadAndSchedule') {
+                    setAutoSchedule(true);
+                    setMarkReady(true);
+                  } else {
+                    setAutoSchedule(false);
+                  }
+                }}
+              >
+                <option value="upload">Upload only</option>
+                <option value="uploadAndSchedule">Upload & schedule</option>
+              </select>
+            </Field>
+
+            {!autoSchedule ? (
+              <Field label="Article status after upload">
+                <select
+                  className="selectFancy"
+                  value={markReady ? 'ready' : 'draft'}
+                  onChange={e => setMarkReady(e.target.value === 'ready')}
+                >
+                  <option value="draft">Draft</option>
+                  <option value="ready">Ready</option>
+                </select>
+              </Field>
+            ) : (
+              <>
+                <Note text="Defaults come from the Auto-Schedule tab. Values here override only this run." />
+
+                <Field label="Start scheduling from" hint="Local time">
+                  <input
+                    type="datetime-local"
+                    value={scheduleStartFrom}
+                    onChange={e => setScheduleStartFrom(e.target.value)}
+                  />
+                </Field>
+
+                <div className="form twoCols">
+                  <Field label="Max articles per company page">
+                    <select
+                      className="selectFancy"
+                      value={String(scheduleOverride.maxArticlesPerCompanyPage ?? 10)}
+                      onChange={e => setScheduleOverride(prev => ({ ...prev, maxArticlesPerCompanyPage: Number(e.target.value) }))}
+                    >
+                      {[1, 2, 3, 5, 10, 15, 20].map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Same company page gap (minutes)">
+                    <select
+                      className="selectFancy"
+                      value={String(scheduleOverride.minGapMinutesSameCompanyPage ?? 180)}
+                      onChange={e => setScheduleOverride(prev => ({ ...prev, minGapMinutesSameCompanyPage: Number(e.target.value) }))}
+                    >
+                      {[0, 30, 60, 120, 180, 240, 360].map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Company pages same account gap (minutes)">
+                    <select
+                      className="selectFancy"
+                      value={String(scheduleOverride.minGapMinutesCompanyPagesSameAccount ?? 60)}
+                      onChange={e => setScheduleOverride(prev => ({ ...prev, minGapMinutesCompanyPagesSameAccount: Number(e.target.value) }))}
+                    >
+                      {[0, 10, 20, 30, 45, 60, 90, 120].map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Across accounts gap (minutes)">
+                    <select
+                      className="selectFancy"
+                      value={String(scheduleOverride.minGapMinutesAcrossAccounts ?? 30)}
+                      onChange={e => setScheduleOverride(prev => ({ ...prev, minGapMinutesAcrossAccounts: Number(e.target.value) }))}
+                    >
+                      {[0, 5, 10, 15, 20, 30, 45, 60].map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Estimated publish duration (minutes)">
+                    <select
+                      className="selectFancy"
+                      value={String(scheduleOverride.estimatedPublishDurationMinutes ?? 18)}
+                      onChange={e => setScheduleOverride(prev => ({ ...prev, estimatedPublishDurationMinutes: Number(e.target.value) }))}
+                    >
+                      {[8, 10, 12, 15, 18, 20, 25, 30].map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Random jitter (minutes)">
+                    <select
+                      className="selectFancy"
+                      value={String(scheduleOverride.jitterMinutes ?? 8)}
+                      onChange={e => setScheduleOverride(prev => ({ ...prev, jitterMinutes: Number(e.target.value) }))}
+                    >
+                      {[0, 2, 5, 8, 10, 15].map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+
+                <div style={{ marginTop: 8 }}>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setScheduleEstimateLoading(true);
+                      void (async () => {
+                        try {
+                          const startIso = scheduleStartFrom ? new Date(scheduleStartFrom).toISOString() : undefined;
+                          const estimate = await AutoScheduleApi.preview({
+                            articleCount: parsedCount,
+                            startFromDate: startIso,
+                            configOverride: scheduleOverride,
+                          });
+                          setScheduleEstimate(estimate);
+                        } catch (e) {
+                          setScheduleEstimate(null);
+                          setError((e as ApiError).message || String(e));
+                        } finally {
+                          setScheduleEstimateLoading(false);
+                        }
+                      })();
+                    }}
+                    disabled={scheduleEstimateLoading || parsedCount <= 0}
+                  >
+                    {scheduleEstimateLoading ? 'Calculating…' : 'Calculate estimate'}
+                  </Button>
+
+                  {scheduleEstimate?.estimatedDurationMinutes ? (
+                    <div className="muted" style={{ marginTop: 8 }}>
+                      Estimated total time: ~{scheduleEstimate.estimatedDurationMinutes} minutes
+                      {scheduleEstimate.estimatedFinishAt ? ` (est. finish: ${new Date(scheduleEstimate.estimatedFinishAt).toLocaleString()})` : ''}
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </div>
+        ) : confirmHasErrors ? (
           <div className="form">
             <p>
               There are {errorRowCount} row{errorRowCount === 1 ? '' : 's'} with validation errors. Skip them and upload

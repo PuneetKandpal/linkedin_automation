@@ -6,10 +6,12 @@ import { AccountModel } from './db/models/AccountModel';
 import { ArticleModel } from './db/models/ArticleModel';
 import { PublishJobModel } from './db/models/PublishJobModel';
 import { AccountIssueModel } from './db/models/AccountIssueModel';
+import { AutoScheduleConfigModel } from './db/models/AutoScheduleConfigModel';
 import { Logger } from './engine/logger';
 import type { AccountDoc } from './db/models/AccountModel';
 import type { ArticleDoc } from './db/models/ArticleModel';
 import { StaticConfigLoader } from './config/static-loader';
+import { autoScheduleArticles } from './services/autoScheduler';
 
 type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<unknown>;
 
@@ -814,6 +816,158 @@ async function main() {
     );
 
     return res.json(job);
+  }));
+
+  app.get('/auto-schedule/config', asyncHandler(async (req: Request, res: Response) => {
+    void req;
+    const defaults = {
+      configId: 'default',
+      maxArticlesPerCompanyPage: 10,
+      minGapMinutesSameCompanyPage: 180,
+      minGapMinutesCompanyPagesSameAccount: 60,
+      minGapMinutesAcrossAccounts: 30,
+      estimatedPublishDurationMinutes: 18,
+      jitterMinutes: 8,
+      defaultStartOffsetMinutes: 10,
+    };
+
+    const existing = await AutoScheduleConfigModel.findOne({ configId: 'default' }).lean();
+    if (!existing) {
+      const created = await AutoScheduleConfigModel.create(defaults);
+      return res.json(created);
+    }
+
+    const merged = { ...defaults, ...(existing as any) };
+    const missing: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(defaults)) {
+      if ((existing as any)[k] === undefined) missing[k] = v;
+    }
+    if (Object.keys(missing).length > 0) {
+      await AutoScheduleConfigModel.updateOne({ configId: 'default' }, { $set: missing });
+    }
+
+    return res.json(merged);
+  }));
+
+  app.put('/auto-schedule/config', asyncHandler(async (req: Request, res: Response) => {
+    const {
+      maxArticlesPerCompanyPage,
+      minGapMinutesSameCompanyPage,
+      minGapMinutesCompanyPagesSameAccount,
+      minGapMinutesAcrossAccounts,
+      estimatedPublishDurationMinutes,
+      jitterMinutes,
+      defaultStartOffsetMinutes,
+    } = req.body as Record<string, unknown>;
+
+    const updates: any = {};
+    if (typeof maxArticlesPerCompanyPage === 'number' && maxArticlesPerCompanyPage > 0) {
+      updates.maxArticlesPerCompanyPage = Math.floor(maxArticlesPerCompanyPage);
+    }
+    if (typeof minGapMinutesSameCompanyPage === 'number' && minGapMinutesSameCompanyPage >= 0) {
+      updates.minGapMinutesSameCompanyPage = Math.floor(minGapMinutesSameCompanyPage);
+    }
+    if (typeof minGapMinutesCompanyPagesSameAccount === 'number' && minGapMinutesCompanyPagesSameAccount >= 0) {
+      updates.minGapMinutesCompanyPagesSameAccount = Math.floor(minGapMinutesCompanyPagesSameAccount);
+    }
+    if (typeof minGapMinutesAcrossAccounts === 'number' && minGapMinutesAcrossAccounts >= 0) {
+      updates.minGapMinutesAcrossAccounts = Math.floor(minGapMinutesAcrossAccounts);
+    }
+    if (typeof estimatedPublishDurationMinutes === 'number' && estimatedPublishDurationMinutes >= 0) {
+      updates.estimatedPublishDurationMinutes = Math.floor(estimatedPublishDurationMinutes);
+    }
+    if (typeof jitterMinutes === 'number' && jitterMinutes >= 0) {
+      updates.jitterMinutes = Math.floor(jitterMinutes);
+    }
+    if (typeof defaultStartOffsetMinutes === 'number' && defaultStartOffsetMinutes >= 0) {
+      updates.defaultStartOffsetMinutes = Math.floor(defaultStartOffsetMinutes);
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    const config = await AutoScheduleConfigModel.findOneAndUpdate(
+      { configId: 'default' },
+      { $set: updates },
+      { new: true, upsert: true }
+    ).lean();
+
+    return res.json(config);
+  }));
+
+  app.post('/auto-schedule/preview', asyncHandler(async (req: Request, res: Response) => {
+    const { startFromDate, articleCount, configOverride } = req.body as Record<string, unknown>;
+
+    let parsedStartDate: Date | undefined;
+    if (startFromDate) {
+      if (typeof startFromDate === 'string') {
+        parsedStartDate = new Date(startFromDate);
+        if (Number.isNaN(parsedStartDate.getTime())) {
+          return res.status(400).json({ error: 'Invalid startFromDate' });
+        }
+      } else if (startFromDate instanceof Date) {
+        parsedStartDate = startFromDate;
+      } else {
+        return res.status(400).json({ error: 'startFromDate must be a date string or Date object' });
+      }
+    }
+
+    const parsedArticleCount = typeof articleCount === 'number' && articleCount > 0 ? Math.floor(articleCount) : undefined;
+
+    const override = typeof configOverride === 'object' && configOverride !== null ? configOverride : undefined;
+
+    const result = await autoScheduleArticles({
+      startFromDate: parsedStartDate,
+      articleCount: parsedArticleCount,
+      configOverride: override as any,
+      dryRun: true,
+      logger,
+    });
+
+    return res.json(result);
+  }));
+
+  app.post('/auto-schedule/execute', asyncHandler(async (req: Request, res: Response) => {
+    const { startFromDate, articleIds, configOverride } = req.body as Record<string, unknown>;
+
+    let parsedStartDate: Date | undefined;
+    if (startFromDate) {
+      if (typeof startFromDate === 'string') {
+        parsedStartDate = new Date(startFromDate);
+        if (Number.isNaN(parsedStartDate.getTime())) {
+          return res.status(400).json({ error: 'Invalid startFromDate' });
+        }
+      } else if (startFromDate instanceof Date) {
+        parsedStartDate = startFromDate;
+      } else {
+        return res.status(400).json({ error: 'startFromDate must be a date string or Date object' });
+      }
+    }
+
+    let parsedArticleIds: string[] | undefined;
+    if (articleIds) {
+      if (!Array.isArray(articleIds)) {
+        return res.status(400).json({ error: 'articleIds must be an array' });
+      }
+      parsedArticleIds = articleIds.filter(id => typeof id === 'string' && id.length > 0);
+      if (parsedArticleIds.length === 0) {
+        return res.status(400).json({ error: 'articleIds array is empty or contains invalid values' });
+      }
+    }
+
+    const override = typeof configOverride === 'object' && configOverride !== null ? configOverride : undefined;
+
+    const result = await autoScheduleArticles({
+      startFromDate: parsedStartDate,
+      articleIds: parsedArticleIds,
+      configOverride: override as any,
+      logger,
+    });
+
+    logger.info('Auto-schedule executed', { scheduled: result.scheduled, jobIds: result.jobIds });
+
+    return res.status(201).json(result);
   }));
 
   app.use((err: unknown, req: Request, res: Response, next: unknown) => {

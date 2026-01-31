@@ -228,6 +228,7 @@ export function BulkPage() {
 
   const [markReady, setMarkReady] = useState(true);
   const [autoSchedule, setAutoSchedule] = useState(false);
+  const [jobIdClientSuffix, setJobIdClientSuffix] = useState('');
   const [scheduleStartFrom, setScheduleStartFrom] = useState<string>('');
   const [scheduleOverride, setScheduleOverride] = useState<AutoScheduleConfigUpdate>({});
   const [scheduleDefaultsLoaded, setScheduleDefaultsLoaded] = useState(false);
@@ -385,6 +386,7 @@ export function BulkPage() {
               articleIds: resp.articleIds,
               startFromDate: startIso,
               configOverride: scheduleOverride,
+              clientSuffix: jobIdClientSuffix.trim() ? jobIdClientSuffix.trim() : undefined,
             });
           } catch (e) {
             setError(`Articles created but auto-schedule failed: ${(e as ApiError).message || String(e)}`);
@@ -434,6 +436,9 @@ export function BulkPage() {
     if (!file || !hasImported) return;
     setConfirmHasErrors(hasAnyErrors);
     if (mode === 'articles') {
+      setAutoSchedule(true);
+      setMarkReady(true);
+      setJobIdClientSuffix('');
       setScheduleEstimate(null);
       setScheduleEstimateLoading(false);
       if (!scheduleDefaultsLoaded) {
@@ -697,6 +702,15 @@ export function BulkPage() {
               </Field>
             ) : (
               <>
+                <Field label="JobId client suffix">
+                  <input
+                    type="text"
+                    value={jobIdClientSuffix}
+                    onChange={e => setJobIdClientSuffix(e.target.value)}
+                    placeholder="client_suffix"
+                  />
+                </Field>
+
                 <Note text="Defaults come from the Auto-Schedule tab. Values here override only this run." />
 
                 <Field label="Start scheduling from" hint="Local time">

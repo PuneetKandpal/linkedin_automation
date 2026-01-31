@@ -41,6 +41,7 @@ export type AutoScheduleExecuteParams = {
   startFromDate?: string;
   articleIds?: string[];
   configOverride?: AutoScheduleConfigUpdate;
+  clientSuffix?: string;
 };
 
 export type AutoScheduleResult = {

@@ -9,6 +9,7 @@ interface AutoScheduleParams {
   articleIds?: string[];
   articleCount?: number;
   configOverride?: Partial<AutoScheduleConfigDoc>;
+  clientSuffix?: string;
   dryRun?: boolean;
   logger: Logger;
 }
@@ -21,7 +22,7 @@ interface ScheduleSlot {
 }
 
 export async function autoScheduleArticles(params: AutoScheduleParams) {
-  const { startFromDate, articleIds, articleCount, configOverride, dryRun, logger } = params;
+  const { startFromDate, articleIds, articleCount, configOverride, clientSuffix, dryRun, logger } = params;
 
   const stored = (await AutoScheduleConfigModel.findOne({ configId: 'default' }).lean()) as AutoScheduleConfigDoc | null;
   if (!stored) throw new Error('Auto-schedule configuration not found');
@@ -207,7 +208,10 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
 
     if (!dryRun) {
       if (typeof articleId === 'string' && !isPreviewArticle) {
-        const jobId = `job_auto_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const baseJobId = `job_auto_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const jobId = clientSuffix && clientSuffix.trim().length > 0
+          ? `${clientSuffix.trim()}_${baseJobId}`
+          : baseJobId;
         await PublishJobModel.create({
           jobId,
           accountId: bestSlot.accountId,

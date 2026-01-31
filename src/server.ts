@@ -969,7 +969,7 @@ async function main() {
   }));
 
   app.post('/auto-schedule/execute', asyncHandler(async (req: Request, res: Response) => {
-    const { startFromDate, articleIds, configOverride } = req.body as Record<string, unknown>;
+    const { startFromDate, articleIds, configOverride, clientSuffix } = req.body as Record<string, unknown>;
 
     let parsedStartDate: Date | undefined;
     if (startFromDate) {
@@ -996,12 +996,17 @@ async function main() {
       }
     }
 
+    const parsedClientSuffix = typeof clientSuffix === 'string' && clientSuffix.trim().length > 0
+      ? clientSuffix.trim()
+      : undefined;
+
     const override = typeof configOverride === 'object' && configOverride !== null ? configOverride : undefined;
 
     const result = await autoScheduleArticles({
       startFromDate: parsedStartDate,
       articleIds: parsedArticleIds,
       configOverride: override as any,
+      clientSuffix: parsedClientSuffix,
       logger,
     });
 

@@ -823,12 +823,19 @@ async function main() {
     const defaults = {
       configId: 'default',
       maxArticlesPerCompanyPage: 10,
+      maxArticlesPerCompanyPageOptions: [1, 2, 3, 5, 10, 15, 20],
       minGapMinutesSameCompanyPage: 180,
+      minGapMinutesSameCompanyPageOptions: [0, 30, 60, 120, 180, 240, 360],
       minGapMinutesCompanyPagesSameAccount: 60,
+      minGapMinutesCompanyPagesSameAccountOptions: [0, 10, 20, 30, 45, 60, 90, 120],
       minGapMinutesAcrossAccounts: 30,
+      minGapMinutesAcrossAccountsOptions: [0, 5, 10, 15, 20, 30, 45, 60],
       estimatedPublishDurationMinutes: 18,
+      estimatedPublishDurationMinutesOptions: [8, 10, 12, 15, 18, 20, 25, 30],
       jitterMinutes: 8,
+      jitterMinutesOptions: [0, 2, 5, 8, 10, 15],
       defaultStartOffsetMinutes: 10,
+      defaultStartOffsetMinutesOptions: [0, 5, 10, 15, 30, 60],
     };
 
     const existing = await AutoScheduleConfigModel.findOne({ configId: 'default' }).lean();
@@ -852,12 +859,19 @@ async function main() {
   app.put('/auto-schedule/config', asyncHandler(async (req: Request, res: Response) => {
     const {
       maxArticlesPerCompanyPage,
+      maxArticlesPerCompanyPageOptions,
       minGapMinutesSameCompanyPage,
+      minGapMinutesSameCompanyPageOptions,
       minGapMinutesCompanyPagesSameAccount,
+      minGapMinutesCompanyPagesSameAccountOptions,
       minGapMinutesAcrossAccounts,
+      minGapMinutesAcrossAccountsOptions,
       estimatedPublishDurationMinutes,
+      estimatedPublishDurationMinutesOptions,
       jitterMinutes,
+      jitterMinutesOptions,
       defaultStartOffsetMinutes,
+      defaultStartOffsetMinutesOptions,
     } = req.body as Record<string, unknown>;
 
     const updates: any = {};
@@ -882,6 +896,32 @@ async function main() {
     if (typeof defaultStartOffsetMinutes === 'number' && defaultStartOffsetMinutes >= 0) {
       updates.defaultStartOffsetMinutes = Math.floor(defaultStartOffsetMinutes);
     }
+
+    function normalizeOptionsArray(value: unknown, opts: { min: number; allowZero: boolean }) {
+      if (!Array.isArray(value)) return undefined;
+      const nums = value
+        .map(v => (typeof v === 'number' ? v : Number(v)))
+        .filter(v => Number.isFinite(v))
+        .map(v => Math.floor(v));
+      const filtered = nums.filter(v => (opts.allowZero ? v >= 0 : v >= opts.min));
+      if (filtered.length === 0) return [];
+      return Array.from(new Set(filtered)).sort((a, b) => a - b);
+    }
+
+    const maxArticlesOpts = normalizeOptionsArray(maxArticlesPerCompanyPageOptions, { min: 1, allowZero: false });
+    if (maxArticlesOpts) updates.maxArticlesPerCompanyPageOptions = maxArticlesOpts;
+    const sameCompanyGapOpts = normalizeOptionsArray(minGapMinutesSameCompanyPageOptions, { min: 0, allowZero: true });
+    if (sameCompanyGapOpts) updates.minGapMinutesSameCompanyPageOptions = sameCompanyGapOpts;
+    const companyPagesGapOpts = normalizeOptionsArray(minGapMinutesCompanyPagesSameAccountOptions, { min: 0, allowZero: true });
+    if (companyPagesGapOpts) updates.minGapMinutesCompanyPagesSameAccountOptions = companyPagesGapOpts;
+    const acrossAccountsGapOpts = normalizeOptionsArray(minGapMinutesAcrossAccountsOptions, { min: 0, allowZero: true });
+    if (acrossAccountsGapOpts) updates.minGapMinutesAcrossAccountsOptions = acrossAccountsGapOpts;
+    const estDurationOpts = normalizeOptionsArray(estimatedPublishDurationMinutesOptions, { min: 0, allowZero: true });
+    if (estDurationOpts) updates.estimatedPublishDurationMinutesOptions = estDurationOpts;
+    const jitterOpts = normalizeOptionsArray(jitterMinutesOptions, { min: 0, allowZero: true });
+    if (jitterOpts) updates.jitterMinutesOptions = jitterOpts;
+    const startOffsetOpts = normalizeOptionsArray(defaultStartOffsetMinutesOptions, { min: 0, allowZero: true });
+    if (startOffsetOpts) updates.defaultStartOffsetMinutesOptions = startOffsetOpts;
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });

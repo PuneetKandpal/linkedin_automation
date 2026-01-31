@@ -3,24 +3,38 @@ import { apiFetchJson } from './http';
 export type AutoScheduleConfig = {
   configId: string;
   maxArticlesPerCompanyPage: number;
+  maxArticlesPerCompanyPageOptions?: number[];
   minGapMinutesSameCompanyPage: number;
+  minGapMinutesSameCompanyPageOptions?: number[];
   minGapMinutesCompanyPagesSameAccount: number;
+  minGapMinutesCompanyPagesSameAccountOptions?: number[];
   minGapMinutesAcrossAccounts: number;
+  minGapMinutesAcrossAccountsOptions?: number[];
   estimatedPublishDurationMinutes: number;
+  estimatedPublishDurationMinutesOptions?: number[];
   jitterMinutes: number;
+  jitterMinutesOptions?: number[];
   defaultStartOffsetMinutes: number;
+  defaultStartOffsetMinutesOptions?: number[];
   createdAt?: string;
   updatedAt?: string;
 };
 
 export type AutoScheduleConfigUpdate = {
   maxArticlesPerCompanyPage?: number;
+  maxArticlesPerCompanyPageOptions?: number[];
   minGapMinutesSameCompanyPage?: number;
+  minGapMinutesSameCompanyPageOptions?: number[];
   minGapMinutesCompanyPagesSameAccount?: number;
+  minGapMinutesCompanyPagesSameAccountOptions?: number[];
   minGapMinutesAcrossAccounts?: number;
+  minGapMinutesAcrossAccountsOptions?: number[];
   estimatedPublishDurationMinutes?: number;
+  estimatedPublishDurationMinutesOptions?: number[];
   jitterMinutes?: number;
+  jitterMinutesOptions?: number[];
   defaultStartOffsetMinutes?: number;
+  defaultStartOffsetMinutesOptions?: number[];
 };
 
 export type AutoScheduleExecuteParams = {

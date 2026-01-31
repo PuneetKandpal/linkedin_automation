@@ -231,6 +231,21 @@ export function BulkPage() {
   const [scheduleStartFrom, setScheduleStartFrom] = useState<string>('');
   const [scheduleOverride, setScheduleOverride] = useState<AutoScheduleConfigUpdate>({});
   const [scheduleDefaultsLoaded, setScheduleDefaultsLoaded] = useState(false);
+  const [scheduleOptionSets, setScheduleOptionSets] = useState<{
+    maxArticlesPerCompanyPage: number[];
+    minGapMinutesSameCompanyPage: number[];
+    minGapMinutesCompanyPagesSameAccount: number[];
+    minGapMinutesAcrossAccounts: number[];
+    estimatedPublishDurationMinutes: number[];
+    jitterMinutes: number[];
+  }>({
+    maxArticlesPerCompanyPage: [1, 2, 3, 5, 10, 15, 20],
+    minGapMinutesSameCompanyPage: [0, 30, 60, 120, 180, 240, 360],
+    minGapMinutesCompanyPagesSameAccount: [0, 10, 20, 30, 45, 60, 90, 120],
+    minGapMinutesAcrossAccounts: [0, 5, 10, 15, 20, 30, 45, 60],
+    estimatedPublishDurationMinutes: [8, 10, 12, 15, 18, 20, 25, 30],
+    jitterMinutes: [0, 2, 5, 8, 10, 15],
+  });
   const [scheduleEstimate, setScheduleEstimate] = useState<AutoScheduleResult | null>(null);
   const [scheduleEstimateLoading, setScheduleEstimateLoading] = useState(false);
 
@@ -425,6 +440,16 @@ export function BulkPage() {
         void (async () => {
           try {
             const cfg = await AutoScheduleApi.getConfig();
+            setScheduleOptionSets({
+              maxArticlesPerCompanyPage: cfg.maxArticlesPerCompanyPageOptions || scheduleOptionSets.maxArticlesPerCompanyPage,
+              minGapMinutesSameCompanyPage: cfg.minGapMinutesSameCompanyPageOptions || scheduleOptionSets.minGapMinutesSameCompanyPage,
+              minGapMinutesCompanyPagesSameAccount:
+                cfg.minGapMinutesCompanyPagesSameAccountOptions || scheduleOptionSets.minGapMinutesCompanyPagesSameAccount,
+              minGapMinutesAcrossAccounts: cfg.minGapMinutesAcrossAccountsOptions || scheduleOptionSets.minGapMinutesAcrossAccounts,
+              estimatedPublishDurationMinutes:
+                cfg.estimatedPublishDurationMinutesOptions || scheduleOptionSets.estimatedPublishDurationMinutes,
+              jitterMinutes: cfg.jitterMinutesOptions || scheduleOptionSets.jitterMinutes,
+            });
             setScheduleOverride({
               maxArticlesPerCompanyPage: cfg.maxArticlesPerCompanyPage,
               minGapMinutesSameCompanyPage: cfg.minGapMinutesSameCompanyPage,
@@ -689,7 +714,7 @@ export function BulkPage() {
                       value={String(scheduleOverride.maxArticlesPerCompanyPage ?? 10)}
                       onChange={e => setScheduleOverride(prev => ({ ...prev, maxArticlesPerCompanyPage: Number(e.target.value) }))}
                     >
-                      {[1, 2, 3, 5, 10, 15, 20].map(v => (
+                      {scheduleOptionSets.maxArticlesPerCompanyPage.map(v => (
                         <option key={v} value={v}>{v}</option>
                       ))}
                     </select>
@@ -701,7 +726,7 @@ export function BulkPage() {
                       value={String(scheduleOverride.minGapMinutesSameCompanyPage ?? 180)}
                       onChange={e => setScheduleOverride(prev => ({ ...prev, minGapMinutesSameCompanyPage: Number(e.target.value) }))}
                     >
-                      {[0, 30, 60, 120, 180, 240, 360].map(v => (
+                      {scheduleOptionSets.minGapMinutesSameCompanyPage.map(v => (
                         <option key={v} value={v}>{v}</option>
                       ))}
                     </select>
@@ -713,7 +738,7 @@ export function BulkPage() {
                       value={String(scheduleOverride.minGapMinutesCompanyPagesSameAccount ?? 60)}
                       onChange={e => setScheduleOverride(prev => ({ ...prev, minGapMinutesCompanyPagesSameAccount: Number(e.target.value) }))}
                     >
-                      {[0, 10, 20, 30, 45, 60, 90, 120].map(v => (
+                      {scheduleOptionSets.minGapMinutesCompanyPagesSameAccount.map(v => (
                         <option key={v} value={v}>{v}</option>
                       ))}
                     </select>
@@ -725,7 +750,7 @@ export function BulkPage() {
                       value={String(scheduleOverride.minGapMinutesAcrossAccounts ?? 30)}
                       onChange={e => setScheduleOverride(prev => ({ ...prev, minGapMinutesAcrossAccounts: Number(e.target.value) }))}
                     >
-                      {[0, 5, 10, 15, 20, 30, 45, 60].map(v => (
+                      {scheduleOptionSets.minGapMinutesAcrossAccounts.map(v => (
                         <option key={v} value={v}>{v}</option>
                       ))}
                     </select>
@@ -737,7 +762,7 @@ export function BulkPage() {
                       value={String(scheduleOverride.estimatedPublishDurationMinutes ?? 18)}
                       onChange={e => setScheduleOverride(prev => ({ ...prev, estimatedPublishDurationMinutes: Number(e.target.value) }))}
                     >
-                      {[8, 10, 12, 15, 18, 20, 25, 30].map(v => (
+                      {scheduleOptionSets.estimatedPublishDurationMinutes.map(v => (
                         <option key={v} value={v}>{v}</option>
                       ))}
                     </select>
@@ -749,7 +774,7 @@ export function BulkPage() {
                       value={String(scheduleOverride.jitterMinutes ?? 8)}
                       onChange={e => setScheduleOverride(prev => ({ ...prev, jitterMinutes: Number(e.target.value) }))}
                     >
-                      {[0, 2, 5, 8, 10, 15].map(v => (
+                      {scheduleOptionSets.jitterMinutes.map(v => (
                         <option key={v} value={v}>{v}</option>
                       ))}
                     </select>

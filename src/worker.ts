@@ -19,6 +19,18 @@ import { ProfilePage } from './pages/ProfilePage';
 import { ErrorCode, PublisherError } from './errors/error.types';
 import { markdownToLinkedInHtml } from './markdown/linkedin';
 
+function setupGlobalErrorHandlers() {
+  process.on('unhandledRejection', err => {
+    // eslint-disable-next-line no-console
+    console.error('Worker → unhandledRejection', err);
+  });
+
+  process.on('uncaughtException', err => {
+    // eslint-disable-next-line no-console
+    console.error('Worker → uncaughtException', err);
+  });
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise(resolvePromise => setTimeout(resolvePromise, ms));
 }
@@ -299,24 +311,37 @@ async function main() {
   await connectMongo();
 
   for (;;) {
-    const now = new Date();
+    try {
+      const now = new Date();
 
-    const job = await PublishJobModel.findOneAndUpdate(
-      { status: 'pending', runAt: { $lte: now } },
-      { $set: { status: 'running', startedAt: new Date() } },
-      { sort: { runAt: 1 }, new: true }
-    ).lean();
+      const job = await PublishJobModel.findOneAndUpdate(
+        { status: 'pending', runAt: { $lte: now } },
+        { $set: { status: 'running', startedAt: new Date() } },
+        { sort: { runAt: 1 }, new: true }
+      ).lean();
 
-    if (!job) {
+      if (!job) {
+        await sleep(pollMs);
+        continue;
+      }
+
+      await runOne(job.jobId, configDir);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Worker → loop error', err);
       await sleep(pollMs);
-      continue;
     }
-
-    await runOne(job.jobId, configDir);
   }
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+setupGlobalErrorHandlers();
+
+function start() {
+  void main().catch(err => {
+    // eslint-disable-next-line no-console
+    console.error('Worker → main failed', err);
+    setTimeout(start, 2_000);
+  });
+}
+
+start();

@@ -13,6 +13,18 @@ import type { ArticleDoc } from './db/models/ArticleModel';
 import { StaticConfigLoader } from './config/static-loader';
 import { autoScheduleArticles } from './services/autoScheduler';
 
+function setupGlobalErrorHandlers() {
+  process.on('unhandledRejection', err => {
+    // eslint-disable-next-line no-console
+    console.error('API → unhandledRejection', err);
+  });
+
+  process.on('uncaughtException', err => {
+    // eslint-disable-next-line no-console
+    console.error('API → uncaughtException', err);
+  });
+}
+
 type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<unknown>;
 
 function asyncHandler(fn: AsyncHandler) {
@@ -1032,5 +1044,12 @@ async function main() {
 main().catch(err => {
   // eslint-disable-next-line no-console
   console.error(err);
-  process.exit(1);
+  setTimeout(() => {
+    void main().catch(innerErr => {
+      // eslint-disable-next-line no-console
+      console.error(innerErr);
+    });
+  }, 2_000);
 });
+
+setupGlobalErrorHandlers();

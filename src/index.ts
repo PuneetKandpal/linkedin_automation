@@ -3,6 +3,17 @@ import { mkdirSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 async function main() {
+  const modeArg = process.argv[2];
+  if (modeArg === 'worker') {
+    await import('./worker');
+    return;
+  }
+
+  if (modeArg === 'server') {
+    await import('./server');
+    return;
+  }
+
   console.log('🚀 LinkedIn Article Publisher - Starting...\n');
 
   const runner = new ArticlePublisherRunner('./config');

@@ -37,6 +37,13 @@ cp package.json client-tools/
 cp package-lock.json client-tools/
 cp .env.example client-tools/
 
+# Shared client config (recommended)
+if [ -f "client-config.json" ]; then
+    cp client-config.json client-tools/
+else
+    cp client-config.json.example client-tools/
+fi
+
 # Create client README
 cat > client-tools/README.md << 'EOF'
 # LinkedIn Publisher - Client Tools
@@ -53,11 +60,13 @@ cat > client-tools/README.md << 'EOF'
    npx playwright install chromium
    ```
 
-2. **Configure**:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your MongoDB URI and secret
-   ```
+2. **Configure (recommended)**:
+   - Edit `client-config.json` if present.
+   - If only `client-config.json.example` exists, rename it:
+     ```bash
+     mv client-config.json.example client-config.json
+     ```
+   - Then edit `client-config.json` and set `mongodbUri` and `storageStateSecret`.
 
 3. **Connect LinkedIn Account**:
    ```bash

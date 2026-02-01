@@ -19,4 +19,4 @@ if (isPkg) {
 }
 
 // Run the worker
-require('../dist/worker-cli.js');
+require('../dist/cli/worker-cli.js');

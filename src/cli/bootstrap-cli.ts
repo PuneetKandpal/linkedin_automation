@@ -3,7 +3,7 @@ import { mkdirSync } from 'fs';
 import { resolve } from 'path';
 import { createInterface } from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
-import { chromium } from '@playwright/test';
+import { chromium } from 'playwright';
 import { Logger } from '../engine/logger';
 import { connectMongo } from '../db/mongo';
 import { encryptJson } from '../db/crypto';

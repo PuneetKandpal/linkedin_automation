@@ -20,4 +20,4 @@ if (isPkg) {
 }
 
 // Run the bootstrap logic
-require('../dist/bootstrap-cli.js');
+require('../dist/cli/bootstrap-cli.js');

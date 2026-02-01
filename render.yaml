@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: linkedin-publisher
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: MONGODB_URI
+        fromDatabase:
+          name: mongodb
+          property: connectionString
+      - key: STORAGE_STATE_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: CONFIG_DIR
+        value: ./config
+      - key: LOG_LEVEL
+        value: info
+
+databases:
+  - name: mongodb
+    type: mongodb
+    plan: free

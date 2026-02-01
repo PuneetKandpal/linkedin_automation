@@ -1,6 +1,6 @@
 {
   "browser": {
-    "headless": false,
+    "headless": true,
     "slowMo": 0,
     "defaultTimeout": 30000
   },

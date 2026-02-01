@@ -12,6 +12,8 @@ import type { AccountDoc } from './db/models/AccountModel';
 import type { ArticleDoc } from './db/models/ArticleModel';
 import { StaticConfigLoader } from './config/static-loader';
 import { autoScheduleArticles } from './services/autoScheduler';
+import path from 'path';
+import fs from 'fs';
 
 function setupGlobalErrorHandlers() {
   process.on('unhandledRejection', err => {
@@ -1033,6 +1035,26 @@ async function main() {
     logger.error('API error', { error: String(err) });
     return res.status(500).json({ error: String(err) });
   });
+
+  // Serve static files from the built UI (production only)
+  const uiBuildPath = path.resolve(__dirname, '../ui/dist');
+  if (fs.existsSync(uiBuildPath)) {
+    app.use(express.static(uiBuildPath));
+    // SPA fallback: serve index.html for all non-API routes
+    app.get('*', (req: Request, res: Response) => {
+      // Don't serve index.html for API routes
+      if (req.path.startsWith('/health') || 
+          req.path.startsWith('/accounts') || 
+          req.path.startsWith('/articles') || 
+          req.path.startsWith('/publish-jobs') ||
+          req.path.startsWith('/config') ||
+          req.path.startsWith('/auto-schedule')) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+      res.sendFile(path.join(uiBuildPath, 'index.html'));
+      return;
+    });
+  }
 
   const port = Number(process.env.PORT || 3000);
   app.listen(port, () => {

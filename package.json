@@ -6,7 +6,10 @@
   "type": "commonjs",
   "scripts": {
     "build": "tsc",
-    "start": "npm run build && node dist/index.js",
+    "build:ui": "cd ui && npm run build",
+    "build:all": "npm run build && npm run build:ui",
+    "start": "node dist/index.js",
+    "start:server": "node dist/server.js",
     "dev": "ts-node src/index.ts",
     "dev:server": "ts-node src/server.ts",
     "dev:worker": "ts-node src/worker.ts",

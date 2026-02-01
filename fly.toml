@@ -1,0 +1,33 @@
+app = "linkedin-publisher"
+primary_region = "sin"  # Singapore - change to your preferred region
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  CORS_ORIGIN = "*"
+  CONFIG_DIR = "./config"
+  LOG_LEVEL = "info"
+  LOG_RETENTION_DAYS = "7"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "40s"
+  method = "GET"
+  path = "/health"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512  # Free tier allows up to 256MB-512MB depending on plan

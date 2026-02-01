@@ -40,8 +40,11 @@ RUN npm ci --omit=dev
 COPY --from=backend-builder /app/dist ./dist
 COPY --from=ui-builder /app/ui/dist ./ui/dist
 
+# Copy default config files required by the API
+COPY --from=backend-builder /app/config ./config
+
 # Create required directories
-RUN mkdir -p config output logs
+RUN mkdir -p output logs
 
 # Expose port
 EXPOSE 3000

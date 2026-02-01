@@ -1,5 +1,5 @@
-# Production Dockerfile for LinkedIn Article Publisher
-# Multi-stage build: build UI and then serve with Node.js
+# Dockerfile for Server + UI only (no Playwright)
+# Use this for cloud deployment where browser automation runs on client machines
 
 # Stage 1: Build UI
 FROM node:20-alpine AS ui-builder
@@ -14,50 +14,41 @@ RUN npm ci
 COPY ui/ ./
 RUN npm run build
 
-# Stage 2: Build backend and serve
-FROM node:20-alpine AS runner
-
-# Install Playwright dependencies
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    freetype-dev \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    && rm -rf /var/cache/apk/*
-
-# Set Playwright to use system Chromium
-ENV PLAYWRIGHT_BROWSERS_PATH=/usr/bin/chromium-browser
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Stage 2: Build backend (needs devDependencies for `tsc`)
+FROM node:20-alpine AS backend-builder
 
 WORKDIR /app
 
 # Copy backend package files
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 
-# Install Playwright
-RUN npx playwright install chromium
-
-# Copy backend source and compiled code
+# Copy backend source and build
 COPY . .
 RUN npm run build
 
-# Copy built UI from stage 1
+# Stage 3: Runtime (production dependencies only)
+FROM node:20-alpine AS server
+
+WORKDIR /app
+
+# Install only production dependencies
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Copy compiled backend and built UI
+COPY --from=backend-builder /app/dist ./dist
 COPY --from=ui-builder /app/ui/dist ./ui/dist
 
 # Create required directories
-RUN mkdir -p config output logs profiles
+RUN mkdir -p config output logs
 
 # Expose port
 EXPOSE 3000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
-# Start the server
+# Start the server only (no worker)
 CMD ["node", "dist/server.js"]

@@ -81,8 +81,6 @@ function minutesToMs(mins: unknown): number {
 }
 
 async function main() {
-  await connectMongo();
-
   const logger = new Logger({ latestLogPath: './output/logs/latest_api.log' });
 
   const configDir = process.env.CONFIG_DIR || './config';
@@ -1033,7 +1031,7 @@ async function main() {
     void req;
     void next;
     logger.error('API error', { error: String(err) });
-    return res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: 'Internal server error' });
   });
 
   // Serve static files from the built UI (production only)
@@ -1061,6 +1059,16 @@ async function main() {
     // eslint-disable-next-line no-console
     console.log(`API listening on :${port}`);
   });
+
+  void connectMongo()
+    .then(() => {
+      // eslint-disable-next-line no-console
+      console.log('MongoDB connected');
+    })
+    .catch(err => {
+      // eslint-disable-next-line no-console
+      console.error('MongoDB connection failed', err);
+    });
 }
 
 main().catch(err => {

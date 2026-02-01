@@ -48,7 +48,7 @@ EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+  CMD sh -c 'wget --no-verbose --tries=1 --spider "http://localhost:${PORT:-3000}/health" || exit 1'
 
 # Start the server only (no worker)
 CMD ["node", "dist/server.js"]

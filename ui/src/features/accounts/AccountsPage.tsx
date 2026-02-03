@@ -194,6 +194,7 @@ export function AccountsPage() {
       setCompanyPageUrl('');
       const pages = await AccountsApi.listCompanyPages(selectedAccountId);
       setCompanyPages(pages);
+      await refresh();
     } catch (e) {
       setCompanyPagesError((e as ApiError).message || String(e));
     }
@@ -206,6 +207,7 @@ export function AccountsPage() {
       await AccountsApi.deleteCompanyPage(selectedAccountId, pageId);
       const pages = await AccountsApi.listCompanyPages(selectedAccountId);
       setCompanyPages(pages);
+      await refresh();
     } catch (e) {
       setCompanyPagesError((e as ApiError).message || String(e));
     }

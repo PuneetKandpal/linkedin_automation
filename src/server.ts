@@ -119,7 +119,14 @@ async function main() {
   app.get('/accounts', asyncHandler(async (req: Request, res: Response) => {
     void req;
     const accounts = await AccountModel.find({}, { storageStateEnc: 0 }).lean();
-    return res.json(accounts);
+    const normalized = (accounts as any[]).map(a => {
+      const pages = Array.isArray(a.companyPages) ? a.companyPages : [];
+      return {
+        ...a,
+        linkStatus: pages.length > 0 ? 'linked' : 'unlinked',
+      };
+    });
+    return res.json(normalized);
   }));
 
   app.post('/accounts', asyncHandler(async (req: Request, res: Response) => {
@@ -228,7 +235,10 @@ async function main() {
 
     await AccountModel.updateOne(
       { accountId },
-      { $push: { companyPages: { pageId: finalPageId, name: finalName, url: finalUrl } } }
+      {
+        $push: { companyPages: { pageId: finalPageId, name: finalName, url: finalUrl } },
+        $set: { linkStatus: 'linked' },
+      }
     );
 
     return res.status(201).json({ pageId: finalPageId });
@@ -237,6 +247,15 @@ async function main() {
   app.delete('/accounts/:accountId/company-pages/:pageId', asyncHandler(async (req: Request, res: Response) => {
     const { accountId, pageId } = req.params;
     await AccountModel.updateOne({ accountId }, { $pull: { companyPages: { pageId } } });
+
+    const account = await AccountModel.findOne({ accountId }, { storageStateEnc: 0 }).lean();
+    if (account) {
+      const pages = Array.isArray((account as any).companyPages) ? (account as any).companyPages : [];
+      const computed = pages.length > 0 ? 'linked' : 'unlinked';
+      if ((account as any).linkStatus !== computed) {
+        await AccountModel.updateOne({ accountId }, { $set: { linkStatus: computed } });
+      }
+    }
     return res.json({ ok: true });
   }));
 

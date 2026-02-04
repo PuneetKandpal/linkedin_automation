@@ -33,6 +33,8 @@ export class BrowserContextFactory {
           '--disable-blink-features=AutomationControlled',
           '--disable-dev-shm-usage',
           '--no-sandbox',
+          '--disable-gpu',
+          '--disable-software-rasterizer',
         ],
       };
 
@@ -55,7 +57,7 @@ export class BrowserContextFactory {
       });
 
       const page = context.pages()[0] || (await context.newPage());
-      await page.goto('https://www.linkedin.com/', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.goto('https://www.linkedin.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
       return context;
     };
 

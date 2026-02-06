@@ -45,7 +45,6 @@ export function AutoSchedulePage() {
   const [minGapMinutesCompanyPagesSameAccount, setMinGapMinutesCompanyPagesSameAccount] = useState(60);
   const [minGapMinutesAcrossAccounts, setMinGapMinutesAcrossAccounts] = useState(30);
   const [estimatedPublishDurationMinutes, setEstimatedPublishDurationMinutes] = useState(18);
-  const [jitterMinutes, setJitterMinutes] = useState(8);
   const [defaultStartOffsetMinutes, setDefaultStartOffsetMinutes] = useState(10);
 
   const [maxArticlesPerCompanyPageOptions, setMaxArticlesPerCompanyPageOptions] = useState('');
@@ -53,7 +52,6 @@ export function AutoSchedulePage() {
   const [minGapMinutesCompanyPagesSameAccountOptions, setMinGapMinutesCompanyPagesSameAccountOptions] = useState('');
   const [minGapMinutesAcrossAccountsOptions, setMinGapMinutesAcrossAccountsOptions] = useState('');
   const [estimatedPublishDurationMinutesOptions, setEstimatedPublishDurationMinutesOptions] = useState('');
-  const [jitterMinutesOptions, setJitterMinutesOptions] = useState('');
   const [defaultStartOffsetMinutesOptions, setDefaultStartOffsetMinutesOptions] = useState('');
 
   const [startFromDate, setStartFromDate] = useState(() => defaultLocalDateTime(10));
@@ -85,7 +83,6 @@ export function AutoSchedulePage() {
       setMinGapMinutesCompanyPagesSameAccount(cfg.minGapMinutesCompanyPagesSameAccount);
       setMinGapMinutesAcrossAccounts(cfg.minGapMinutesAcrossAccounts);
       setEstimatedPublishDurationMinutes(cfg.estimatedPublishDurationMinutes);
-      setJitterMinutes(cfg.jitterMinutes);
       setDefaultStartOffsetMinutes(cfg.defaultStartOffsetMinutes);
 
       setMaxArticlesPerCompanyPageOptions(optionsToString(cfg.maxArticlesPerCompanyPageOptions));
@@ -93,7 +90,6 @@ export function AutoSchedulePage() {
       setMinGapMinutesCompanyPagesSameAccountOptions(optionsToString(cfg.minGapMinutesCompanyPagesSameAccountOptions));
       setMinGapMinutesAcrossAccountsOptions(optionsToString(cfg.minGapMinutesAcrossAccountsOptions));
       setEstimatedPublishDurationMinutesOptions(optionsToString(cfg.estimatedPublishDurationMinutesOptions));
-      setJitterMinutesOptions(optionsToString(cfg.jitterMinutesOptions));
       setDefaultStartOffsetMinutesOptions(optionsToString(cfg.defaultStartOffsetMinutesOptions));
     } catch (e) {
       setError((e as ApiError).message || String(e));
@@ -118,8 +114,6 @@ export function AutoSchedulePage() {
         minGapMinutesAcrossAccountsOptions: parseOptionsString(minGapMinutesAcrossAccountsOptions),
         estimatedPublishDurationMinutes,
         estimatedPublishDurationMinutesOptions: parseOptionsString(estimatedPublishDurationMinutesOptions),
-        jitterMinutes,
-        jitterMinutesOptions: parseOptionsString(jitterMinutesOptions),
         defaultStartOffsetMinutes,
         defaultStartOffsetMinutesOptions: parseOptionsString(defaultStartOffsetMinutesOptions),
       });
@@ -232,28 +226,6 @@ export function AutoSchedulePage() {
             <input
               value={estimatedPublishDurationMinutesOptions}
               onChange={e => setEstimatedPublishDurationMinutesOptions(e.target.value)}
-            />
-          </Field>
-
-          <Field label="Random Jitter - Minutes">
-            <input
-              type="number"
-              min="0"
-              value={jitterMinutes}
-              onChange={e => setJitterMinutes(Number(e.target.value))}
-            />
-          </Field>
-
-          <Field label="Random Jitter - Dropdown Options" hint="Comma-separated numbers">
-            <input value={jitterMinutesOptions} onChange={e => setJitterMinutesOptions(e.target.value)} />
-          </Field>
-
-          <Field label="Default Start Offset - Minutes">
-            <input
-              type="number"
-              min="0"
-              value={defaultStartOffsetMinutes}
-              onChange={e => setDefaultStartOffsetMinutes(Number(e.target.value))}
             />
           </Field>
 

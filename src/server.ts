@@ -312,6 +312,47 @@ async function main() {
     return res.json(updated);
   }));
 
+  app.post('/accounts/bulk-delete', asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    const accountIdsRaw = (body.accountIds ?? body.items ?? body.ids) as unknown;
+    if (!Array.isArray(accountIdsRaw) || accountIdsRaw.length === 0) {
+      return res.status(400).json({ error: 'Missing accountIds array' });
+    }
+
+    const accountIds = Array.from(
+      new Set(
+        accountIdsRaw
+          .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+          .map(v => v.trim())
+      )
+    );
+    if (accountIds.length === 0) {
+      return res.status(400).json({ error: 'accountIds array is empty or contains invalid values' });
+    }
+
+    const jobsForAccounts = await PublishJobModel.find(
+      { accountId: { $in: accountIds } },
+      { jobId: 1, accountId: 1, status: 1 }
+    ).lean();
+
+    if ((jobsForAccounts as any[]).length > 0) {
+      const counts = new Map<string, number>();
+      for (const j of jobsForAccounts as any[]) {
+        if (typeof j.accountId === 'string') {
+          counts.set(j.accountId, (counts.get(j.accountId) ?? 0) + 1);
+        }
+      }
+      const blocked = accountIds.filter(id => (counts.get(id) ?? 0) > 0);
+      return res.status(400).json({
+        error: 'Cannot delete accounts while publish jobs exist. Delete all publish jobs for these accounts first.',
+        blockedAccountIds: blocked,
+      });
+    }
+
+    const del = await AccountModel.deleteMany({ accountId: { $in: accountIds } });
+    return res.json({ ok: true, deletedCount: (del as any).deletedCount ?? 0, accountIds });
+  }));
+
   app.get('/accounts/:accountId/issues', asyncHandler(async (req: Request, res: Response) => {
     const issues = await AccountIssueModel.find({ accountId: req.params.accountId }).sort({ createdAt: -1 }).lean();
     return res.json(issues);
@@ -420,6 +461,74 @@ async function main() {
       { $set: { status: 'ready' } }
     );
     return res.json({ ok: true, articleIds: ids });
+  }));
+
+  app.post('/articles/status/bulk', asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    const articleIdsRaw = (body.articleIds ?? body.ids ?? body.items) as unknown;
+    const status = body.status as unknown;
+    if (!Array.isArray(articleIdsRaw) || articleIdsRaw.length === 0) {
+      return res.status(400).json({ error: 'Missing articleIds array' });
+    }
+    if (typeof status !== 'string' || !['draft', 'ready', 'scheduled', 'publishing', 'published', 'failed'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const ids = Array.from(
+      new Set(articleIdsRaw.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map(v => v.trim()))
+    );
+    if (ids.length === 0) return res.status(400).json({ error: 'articleIds array is empty or contains invalid values' });
+
+    if (status === 'published') {
+      return res.status(400).json({ error: 'Cannot bulk set status to published' });
+    }
+
+    // If any article has a pending/running job, block status changes to avoid inconsistent state.
+    const existingJobs = await PublishJobModel.find(
+      { articleId: { $in: ids }, status: { $in: ['pending', 'running'] } },
+      { articleId: 1, status: 1 }
+    ).lean();
+    if ((existingJobs as any[]).length > 0) {
+      const blocked = Array.from(new Set((existingJobs as any[]).map(j => j.articleId).filter(Boolean)));
+      return res.status(400).json({
+        error: 'Cannot update status for articles that have pending/running publish jobs. Cancel/delete those jobs first.',
+        blockedArticleIds: blocked,
+      });
+    }
+
+    await ArticleModel.updateMany(
+      { articleId: { $in: ids }, status: { $ne: 'published' } },
+      { $set: { status } }
+    );
+    return res.json({ ok: true, articleIds: ids, status });
+  }));
+
+  app.post('/articles/bulk-delete', asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    const articleIdsRaw = (body.articleIds ?? body.items ?? body.ids) as unknown;
+    if (!Array.isArray(articleIdsRaw) || articleIdsRaw.length === 0) {
+      return res.status(400).json({ error: 'Missing articleIds array' });
+    }
+
+    const ids = Array.from(
+      new Set(articleIdsRaw.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map(v => v.trim()))
+    );
+    if (ids.length === 0) return res.status(400).json({ error: 'articleIds array is empty or contains invalid values' });
+
+    const existingJobs = await PublishJobModel.find(
+      { articleId: { $in: ids }, status: { $in: ['pending', 'running'] } },
+      { articleId: 1, status: 1 }
+    ).lean();
+    if ((existingJobs as any[]).length > 0) {
+      const blocked = Array.from(new Set((existingJobs as any[]).map(j => j.articleId).filter(Boolean)));
+      return res.status(400).json({
+        error: 'Cannot delete articles with pending/running publish jobs. Cancel/delete those jobs first.',
+        blockedArticleIds: blocked,
+      });
+    }
+
+    const del = await ArticleModel.deleteMany({ articleId: { $in: ids } });
+    return res.json({ ok: true, deletedCount: (del as any).deletedCount ?? 0, articleIds: ids });
   }));
 
   app.patch('/articles/:articleId', asyncHandler(async (req: Request, res: Response) => {
@@ -849,6 +958,67 @@ async function main() {
     return res.json(job);
   }));
 
+  app.post('/publish-jobs/cancel/bulk', asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    const jobIdsRaw = (body.jobIds ?? body.items ?? body.ids) as unknown;
+    if (!Array.isArray(jobIdsRaw) || jobIdsRaw.length === 0) {
+      return res.status(400).json({ error: 'Missing jobIds array' });
+    }
+
+    const jobIds = Array.from(new Set(jobIdsRaw.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map(v => v.trim())));
+    if (jobIds.length === 0) return res.status(400).json({ error: 'jobIds array is empty or contains invalid values' });
+
+    const toCancel = await PublishJobModel.find({ jobId: { $in: jobIds } }, { jobId: 1, status: 1, articleId: 1 }).lean();
+    const missing = jobIds.filter(id => !(toCancel as any[]).some(j => j.jobId === id));
+    const notCancelable = (toCancel as any[])
+      .filter(j => j.status !== 'pending')
+      .map(j => ({ jobId: j.jobId, status: j.status }));
+    if (notCancelable.length > 0) {
+      return res.status(400).json({
+        error: 'Some jobs are not cancelable (only pending jobs can be canceled).',
+        notCancelable,
+        missing,
+      });
+    }
+
+    await PublishJobModel.updateMany(
+      { jobId: { $in: jobIds }, status: 'pending' },
+      { $set: { status: 'canceled', finishedAt: new Date() } }
+    );
+
+    // For canceled jobs, revert scheduled articles back to ready.
+    const articleIds = Array.from(new Set((toCancel as any[]).map(j => j.articleId).filter(Boolean)));
+    if (articleIds.length > 0) {
+      await ArticleModel.updateMany(
+        { articleId: { $in: articleIds }, status: 'scheduled' },
+        { $set: { status: 'ready' } }
+      );
+    }
+
+    return res.json({ ok: true, canceledJobIds: jobIds, missing });
+  }));
+
+  app.post('/publish-jobs/bulk-delete', asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    const jobIdsRaw = (body.jobIds ?? body.items ?? body.ids) as unknown;
+    if (!Array.isArray(jobIdsRaw) || jobIdsRaw.length === 0) {
+      return res.status(400).json({ error: 'Missing jobIds array' });
+    }
+
+    const jobIds = Array.from(new Set(jobIdsRaw.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map(v => v.trim())));
+    if (jobIds.length === 0) return res.status(400).json({ error: 'jobIds array is empty or contains invalid values' });
+
+    const jobs = await PublishJobModel.find({ jobId: { $in: jobIds } }, { jobId: 1, status: 1 }).lean();
+    const missing = jobIds.filter(id => !(jobs as any[]).some(j => j.jobId === id));
+    const running = (jobs as any[]).filter(j => j.status === 'running').map(j => j.jobId);
+    if (running.length > 0) {
+      return res.status(400).json({ error: 'Cannot delete running jobs', runningJobIds: running, missing });
+    }
+
+    const del = await PublishJobModel.deleteMany({ jobId: { $in: jobIds }, status: { $ne: 'running' } });
+    return res.json({ ok: true, deletedCount: (del as any).deletedCount ?? 0, jobIds, missing });
+  }));
+
   app.get('/auto-schedule/config', asyncHandler(async (req: Request, res: Response) => {
     void req;
     const defaults = {
@@ -863,8 +1033,6 @@ async function main() {
       minGapMinutesAcrossAccountsOptions: [0, 5, 10, 15, 20, 30, 45, 60],
       estimatedPublishDurationMinutes: 18,
       estimatedPublishDurationMinutesOptions: [8, 10, 12, 15, 18, 20, 25, 30],
-      jitterMinutes: 8,
-      jitterMinutesOptions: [0, 2, 5, 8, 10, 15],
       defaultStartOffsetMinutes: 10,
       defaultStartOffsetMinutesOptions: [0, 5, 10, 15, 30, 60],
     };
@@ -899,8 +1067,6 @@ async function main() {
       minGapMinutesAcrossAccountsOptions,
       estimatedPublishDurationMinutes,
       estimatedPublishDurationMinutesOptions,
-      jitterMinutes,
-      jitterMinutesOptions,
       defaultStartOffsetMinutes,
       defaultStartOffsetMinutesOptions,
     } = req.body as Record<string, unknown>;
@@ -920,9 +1086,6 @@ async function main() {
     }
     if (typeof estimatedPublishDurationMinutes === 'number' && estimatedPublishDurationMinutes >= 0) {
       updates.estimatedPublishDurationMinutes = Math.floor(estimatedPublishDurationMinutes);
-    }
-    if (typeof jitterMinutes === 'number' && jitterMinutes >= 0) {
-      updates.jitterMinutes = Math.floor(jitterMinutes);
     }
     if (typeof defaultStartOffsetMinutes === 'number' && defaultStartOffsetMinutes >= 0) {
       updates.defaultStartOffsetMinutes = Math.floor(defaultStartOffsetMinutes);
@@ -949,8 +1112,6 @@ async function main() {
     if (acrossAccountsGapOpts) updates.minGapMinutesAcrossAccountsOptions = acrossAccountsGapOpts;
     const estDurationOpts = normalizeOptionsArray(estimatedPublishDurationMinutesOptions, { min: 0, allowZero: true });
     if (estDurationOpts) updates.estimatedPublishDurationMinutesOptions = estDurationOpts;
-    const jitterOpts = normalizeOptionsArray(jitterMinutesOptions, { min: 0, allowZero: true });
-    if (jitterOpts) updates.jitterMinutesOptions = jitterOpts;
     const startOffsetOpts = normalizeOptionsArray(defaultStartOffsetMinutesOptions, { min: 0, allowZero: true });
     if (startOffsetOpts) updates.defaultStartOffsetMinutesOptions = startOffsetOpts;
 

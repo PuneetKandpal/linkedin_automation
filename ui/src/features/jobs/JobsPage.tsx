@@ -163,6 +163,8 @@ export function JobsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(() => new Set());
+
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [failureOpen, setFailureOpen] = useState(false);
   const [failureJobId, setFailureJobId] = useState<string>('');
@@ -170,6 +172,55 @@ export function JobsPage() {
   const sortedJobs = useMemo(() => {
     return [...jobs].sort((a, b) => new Date(b.runAt).getTime() - new Date(a.runAt).getTime());
   }, [jobs]);
+
+  const allSelected = useMemo(() => {
+    if (sortedJobs.length === 0) return false;
+    return sortedJobs.every(j => selectedJobIds.has(j.jobId));
+  }, [sortedJobs, selectedJobIds]);
+
+  const selectedCount = selectedJobIds.size;
+
+  async function bulkCancelSelected() {
+    const selected = sortedJobs.filter(j => selectedJobIds.has(j.jobId));
+    const pendingIds = selected.filter(j => j.status === 'pending').map(j => j.jobId);
+    if (pendingIds.length === 0) {
+      window.alert('No pending jobs selected to cancel.');
+      return;
+    }
+    const ok = window.confirm(`Cancel ${pendingIds.length} pending job${pendingIds.length === 1 ? '' : 's'}?`);
+    if (!ok) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      await JobsApi.bulkCancel(pendingIds);
+      setSelectedJobIds(prev => {
+        const next = new Set(prev);
+        pendingIds.forEach(id => next.delete(id));
+        return next;
+      });
+      await refreshAll();
+      setSuccess(`Canceled ${pendingIds.length} job${pendingIds.length === 1 ? '' : 's'}`);
+    } catch (e) {
+      setError((e as ApiError).message || String(e));
+    }
+  }
+
+  async function bulkDeleteSelected() {
+    const ids = sortedJobs.filter(j => selectedJobIds.has(j.jobId)).map(j => j.jobId);
+    if (ids.length === 0) return;
+    const ok = window.confirm(`Delete ${ids.length} job${ids.length === 1 ? '' : 's'}?`);
+    if (!ok) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      await JobsApi.bulkDelete(ids);
+      setSelectedJobIds(new Set());
+      await refreshAll();
+      setSuccess(`Deleted ${ids.length} job${ids.length === 1 ? '' : 's'}`);
+    } catch (e) {
+      setError((e as ApiError).message || String(e));
+    }
+  }
 
   const [jobId, setJobId] = useState(generateJobId());
   const [accountId, setAccountId] = useState('');
@@ -489,6 +540,16 @@ export function JobsPage() {
         title="Publish Jobs"
         right={
           <div className="row">
+            {selectedCount > 0 ? (
+              <>
+                <Button variant="ghost" onClick={() => void bulkCancelSelected()} disabled={loading}>
+                  Cancel selected ({selectedCount})
+                </Button>
+                <Button variant="ghost" onClick={() => void bulkDeleteSelected()} disabled={loading}>
+                  Delete selected ({selectedCount})
+                </Button>
+              </>
+            ) : null}
             <Button variant="primary" onClick={openSchedule}>
               Schedule
             </Button>
@@ -509,6 +570,24 @@ export function JobsPage() {
           <table className="table">
             <thead>
               <tr>
+                <th style={{ width: 34 }}>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setSelectedJobIds(prev => {
+                        const next = new Set(prev);
+                        if (checked) {
+                          sortedJobs.forEach(j => next.add(j.jobId));
+                        } else {
+                          sortedJobs.forEach(j => next.delete(j.jobId));
+                        }
+                        return next;
+                      });
+                    }}
+                  />
+                </th>
                 <th>Job</th>
                 <th>Account</th>
                 <th>Company page</th>
@@ -521,6 +600,21 @@ export function JobsPage() {
             <tbody>
               {sortedJobs.map(j => (
                 <tr key={j.jobId}>
+                  <td onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedJobIds.has(j.jobId)}
+                      onChange={e => {
+                        const checked = e.target.checked;
+                        setSelectedJobIds(prev => {
+                          const next = new Set(prev);
+                          if (checked) next.add(j.jobId);
+                          else next.delete(j.jobId);
+                          return next;
+                        });
+                      }}
+                    />
+                  </td>
                   <td>
                     <div className="cellStack jobCell">
                       <span className="strong breakWord">{j.jobId}</span>

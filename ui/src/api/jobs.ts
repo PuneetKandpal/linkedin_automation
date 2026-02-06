@@ -54,4 +54,22 @@ export const JobsApi = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+
+  bulkCancel: (jobIds: string[]) =>
+    apiFetchJson<{ ok: boolean; canceledJobIds: string[]; missing: string[]; notCancelable?: Array<{ jobId: string; status: string }> }>(
+      '/publish-jobs/cancel/bulk',
+      {
+        method: 'POST',
+        body: JSON.stringify({ jobIds }),
+      }
+    ),
+
+  bulkDelete: (jobIds: string[]) =>
+    apiFetchJson<{ ok: boolean; deletedCount: number; jobIds: string[]; missing: string[]; runningJobIds?: string[] }>(
+      '/publish-jobs/bulk-delete',
+      {
+        method: 'POST',
+        body: JSON.stringify({ jobIds }),
+      }
+    ),
 };

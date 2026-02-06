@@ -47,4 +47,22 @@ export const ArticlesApi = {
       method: 'POST',
       body: JSON.stringify({ articleIds }),
     }),
+
+  bulkSetStatus: (articleIds: string[], status: string) =>
+    apiFetchJson<{ ok: boolean; articleIds: string[]; status: string; blockedArticleIds?: string[] }>(
+      '/articles/status/bulk',
+      {
+        method: 'POST',
+        body: JSON.stringify({ articleIds, status }),
+      }
+    ),
+
+  bulkDelete: (articleIds: string[]) =>
+    apiFetchJson<{ ok: boolean; deletedCount: number; articleIds: string[]; blockedArticleIds?: string[] }>(
+      '/articles/bulk-delete',
+      {
+        method: 'POST',
+        body: JSON.stringify({ articleIds }),
+      }
+    ),
 };

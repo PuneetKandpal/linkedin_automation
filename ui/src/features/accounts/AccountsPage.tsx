@@ -19,6 +19,8 @@ export function AccountsPage() {
   const [issuesLoading, setIssuesLoading] = useState(false);
   const [updatingAccountId, setUpdatingAccountId] = useState<string | null>(null);
 
+  const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(() => new Set());
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled'>('all');
 
@@ -95,6 +97,13 @@ export function AccountsPage() {
     });
   }, [accounts, search, statusFilter]);
 
+  const allFilteredSelected = useMemo(() => {
+    if (filteredAccounts.length === 0) return false;
+    return filteredAccounts.every(a => selectedAccountIds.has(a.accountId));
+  }, [filteredAccounts, selectedAccountIds]);
+
+  const selectedCount = selectedAccountIds.size;
+
   useEffect(() => {
     if (!filteredAccounts.length) {
       if (selectedAccountId) setSelectedAccountId('');
@@ -136,6 +145,24 @@ export function AccountsPage() {
       setError((e as ApiError).message || String(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function bulkDeleteSelectedAccounts() {
+    const ids = Array.from(selectedAccountIds);
+    if (ids.length === 0) return;
+    const ok = window.confirm(`Delete ${ids.length} account${ids.length === 1 ? '' : 's'}?`);
+    if (!ok) return;
+    setError(null);
+    try {
+      await AccountsApi.bulkDelete(ids);
+      setSelectedAccountIds(new Set());
+      await refresh();
+      if (selectedAccountId && ids.includes(selectedAccountId)) {
+        setSelectedAccountId('');
+      }
+    } catch (e) {
+      setError((e as ApiError).message || String(e));
     }
   }
 
@@ -316,6 +343,11 @@ export function AccountsPage() {
         title="Account Directory"
         right={
           <div className="row">
+            {selectedCount > 0 ? (
+              <Button variant="ghost" onClick={() => void bulkDeleteSelectedAccounts()} disabled={loading}>
+                Delete selected ({selectedCount})
+              </Button>
+            ) : null}
             <Button variant="primary" onClick={openCreate}>
               New account
             </Button>
@@ -354,6 +386,24 @@ export function AccountsPage() {
               <table className="table">
                 <thead>
                   <tr>
+                    <th style={{ width: 34 }}>
+                      <input
+                        type="checkbox"
+                        checked={allFilteredSelected}
+                        onChange={e => {
+                          const checked = e.target.checked;
+                          setSelectedAccountIds(prev => {
+                            const next = new Set(prev);
+                            if (checked) {
+                              filteredAccounts.forEach(a => next.add(a.accountId));
+                            } else {
+                              filteredAccounts.forEach(a => next.delete(a.accountId));
+                            }
+                            return next;
+                          });
+                        }}
+                      />
+                    </th>
                     <th>Account</th>
                     <th>Email</th>
                     <th>Timezone</th>
@@ -365,14 +415,14 @@ export function AccountsPage() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="muted">
+                      <td colSpan={7} className="muted">
                         Loading accounts…
                       </td>
                     </tr>
                   ) : null}
                   {!loading && filteredAccounts.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="muted">
+                      <td colSpan={7} className="muted">
                         No accounts match the filters
                       </td>
                     </tr>
@@ -381,8 +431,27 @@ export function AccountsPage() {
                     <tr
                       key={a.accountId}
                       className={a.accountId === selectedAccountId ? 'selected' : ''}
-                      onClick={() => setSelectedAccountId(a.accountId)}
+                      onClick={e => {
+                        const el = e.target as HTMLElement;
+                        if (el && el.closest('input[type="checkbox"]')) return;
+                        setSelectedAccountId(a.accountId);
+                      }}
                     >
+                      <td onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedAccountIds.has(a.accountId)}
+                          onChange={e => {
+                            const checked = e.target.checked;
+                            setSelectedAccountIds(prev => {
+                              const next = new Set(prev);
+                              if (checked) next.add(a.accountId);
+                              else next.delete(a.accountId);
+                              return next;
+                            });
+                          }}
+                        />
+                      </td>
                       <td>
                         <div className="strong">{a.displayName}</div>
                         <div className="muted">{a.accountId}</div>

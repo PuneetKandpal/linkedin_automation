@@ -34,6 +34,8 @@ export function ArticlesPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(() => new Set());
+
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -42,6 +44,13 @@ export function ArticlesPage() {
     () => articles.find(a => a.articleId === selectedArticleId) || null,
     [articles, selectedArticleId]
   );
+
+  const allSelected = useMemo(() => {
+    if (articles.length === 0) return false;
+    return articles.every(a => selectedArticleIds.has(a.articleId));
+  }, [articles, selectedArticleIds]);
+
+  const selectedCount = selectedArticleIds.size;
 
   const [articleId, setArticleId] = useState(generateArticleId());
   const [language, setLanguage] = useState('en');
@@ -70,6 +79,26 @@ export function ArticlesPage() {
       setError((e as ApiError).message || String(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function bulkDelete() {
+    const ids = Array.from(selectedArticleIds);
+    if (ids.length === 0) return;
+    const ok = window.confirm(`Delete ${ids.length} article${ids.length === 1 ? '' : 's'}?`);
+    if (!ok) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      await ArticlesApi.bulkDelete(ids);
+      setSelectedArticleIds(new Set());
+      if (selectedArticleId && ids.includes(selectedArticleId)) {
+        setSelectedArticleId('');
+      }
+      await refresh();
+      setSuccess(`Deleted ${ids.length} article${ids.length === 1 ? '' : 's'}`);
+    } catch (e) {
+      setError((e as ApiError).message || String(e));
     }
   }
 
@@ -216,6 +245,13 @@ export function ArticlesPage() {
         title="Articles"
         right={
           <div className="row">
+            {selectedCount > 0 ? (
+              <>
+                <Button variant="ghost" onClick={() => void bulkDelete()} disabled={loading}>
+                  Delete selected ({selectedCount})
+                </Button>
+              </>
+            ) : null}
             <Button variant="primary" onClick={openCreate}>
               New article
             </Button>
@@ -231,6 +267,24 @@ export function ArticlesPage() {
           <table className="table">
             <thead>
               <tr>
+                <th style={{ width: 34 }}>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setSelectedArticleIds(prev => {
+                        const next = new Set(prev);
+                        if (checked) {
+                          articles.forEach(a => next.add(a.articleId));
+                        } else {
+                          articles.forEach(a => next.delete(a.articleId));
+                        }
+                        return next;
+                      });
+                    }}
+                  />
+                </th>
                 <th>Title</th>
                 <th>Language</th>
                 <th>Status</th>
@@ -244,10 +298,25 @@ export function ArticlesPage() {
                   className={a.articleId === selectedArticleId ? 'selected' : ''}
                   onClick={e => {
                     const el = e.target as HTMLElement;
-                    if (el && el.closest('button, a')) return;
+                    if (el && el.closest('button, a, input[type="checkbox"]')) return;
                     setSelectedArticleId(a.articleId);
                   }}
                 >
+                  <td onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedArticleIds.has(a.articleId)}
+                      onChange={e => {
+                        const checked = e.target.checked;
+                        setSelectedArticleIds(prev => {
+                          const next = new Set(prev);
+                          if (checked) next.add(a.articleId);
+                          else next.delete(a.articleId);
+                          return next;
+                        });
+                      }}
+                    />
+                  </td>
                   <td>
                     <div className="strong">{a.title}</div>
                     <div className="muted">{a.articleId}</div>
@@ -299,7 +368,7 @@ export function ArticlesPage() {
               ))}
               {articles.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="muted">
+                  <td colSpan={5} className="muted">
                     No articles yet
                   </td>
                 </tr>

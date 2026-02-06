@@ -12,8 +12,6 @@ export type AutoScheduleConfig = {
   minGapMinutesAcrossAccountsOptions?: number[];
   estimatedPublishDurationMinutes: number;
   estimatedPublishDurationMinutesOptions?: number[];
-  jitterMinutes: number;
-  jitterMinutesOptions?: number[];
   defaultStartOffsetMinutes: number;
   defaultStartOffsetMinutesOptions?: number[];
   createdAt?: string;
@@ -31,8 +29,6 @@ export type AutoScheduleConfigUpdate = {
   minGapMinutesAcrossAccountsOptions?: number[];
   estimatedPublishDurationMinutes?: number;
   estimatedPublishDurationMinutesOptions?: number[];
-  jitterMinutes?: number;
-  jitterMinutesOptions?: number[];
   defaultStartOffsetMinutes?: number;
   defaultStartOffsetMinutesOptions?: number[];
 };

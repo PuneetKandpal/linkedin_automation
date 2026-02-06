@@ -238,14 +238,12 @@ export function BulkPage() {
     minGapMinutesCompanyPagesSameAccount: number[];
     minGapMinutesAcrossAccounts: number[];
     estimatedPublishDurationMinutes: number[];
-    jitterMinutes: number[];
   }>({
     maxArticlesPerCompanyPage: [1, 2, 3, 5, 10, 15, 20],
     minGapMinutesSameCompanyPage: [0, 30, 60, 120, 180, 240, 360],
     minGapMinutesCompanyPagesSameAccount: [0, 10, 20, 30, 45, 60, 90, 120],
     minGapMinutesAcrossAccounts: [0, 5, 10, 15, 20, 30, 45, 60],
     estimatedPublishDurationMinutes: [8, 10, 12, 15, 18, 20, 25, 30],
-    jitterMinutes: [0, 2, 5, 8, 10, 15],
   });
   const [scheduleEstimate, setScheduleEstimate] = useState<AutoScheduleResult | null>(null);
   const [scheduleEstimateLoading, setScheduleEstimateLoading] = useState(false);
@@ -453,7 +451,6 @@ export function BulkPage() {
               minGapMinutesAcrossAccounts: cfg.minGapMinutesAcrossAccountsOptions || scheduleOptionSets.minGapMinutesAcrossAccounts,
               estimatedPublishDurationMinutes:
                 cfg.estimatedPublishDurationMinutesOptions || scheduleOptionSets.estimatedPublishDurationMinutes,
-              jitterMinutes: cfg.jitterMinutesOptions || scheduleOptionSets.jitterMinutes,
             });
             setScheduleOverride({
               maxArticlesPerCompanyPage: cfg.maxArticlesPerCompanyPage,
@@ -461,7 +458,6 @@ export function BulkPage() {
               minGapMinutesCompanyPagesSameAccount: cfg.minGapMinutesCompanyPagesSameAccount,
               minGapMinutesAcrossAccounts: cfg.minGapMinutesAcrossAccounts,
               estimatedPublishDurationMinutes: cfg.estimatedPublishDurationMinutes,
-              jitterMinutes: cfg.jitterMinutes,
             });
             setScheduleStartFrom(defaultLocalDateTime(cfg.defaultStartOffsetMinutes));
             setScheduleDefaultsLoaded(true);
@@ -777,18 +773,6 @@ export function BulkPage() {
                       onChange={e => setScheduleOverride(prev => ({ ...prev, estimatedPublishDurationMinutes: Number(e.target.value) }))}
                     >
                       {scheduleOptionSets.estimatedPublishDurationMinutes.map(v => (
-                        <option key={v} value={v}>{v}</option>
-                      ))}
-                    </select>
-                  </Field>
-
-                  <Field label="Random jitter (minutes)">
-                    <select
-                      className="selectFancy"
-                      value={String(scheduleOverride.jitterMinutes ?? 8)}
-                      onChange={e => setScheduleOverride(prev => ({ ...prev, jitterMinutes: Number(e.target.value) }))}
-                    >
-                      {scheduleOptionSets.jitterMinutes.map(v => (
                         <option key={v} value={v}>{v}</option>
                       ))}
                     </select>

@@ -18,7 +18,6 @@ export interface PublishJobDoc {
     minGapMinutesCompanyPagesSameAccount?: number;
     minGapMinutesAcrossAccounts?: number;
     estimatedPublishDurationMinutes?: number;
-    jitterMinutes?: number;
   };
   runAt: Date;
   status: PublishJobStatus;
@@ -50,7 +49,6 @@ const PublishJobSchema = new mongoose.Schema(
         minGapMinutesCompanyPagesSameAccount: { type: Number, required: false },
         minGapMinutesAcrossAccounts: { type: Number, required: false },
         estimatedPublishDurationMinutes: { type: Number, required: false },
-        jitterMinutes: { type: Number, required: false },
       },
       required: false,
       _id: false,

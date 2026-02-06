@@ -12,8 +12,6 @@ export interface AutoScheduleConfigDoc {
   minGapMinutesAcrossAccountsOptions?: number[];
   estimatedPublishDurationMinutes: number;
   estimatedPublishDurationMinutesOptions?: number[];
-  jitterMinutes: number;
-  jitterMinutesOptions?: number[];
   defaultStartOffsetMinutes: number;
   defaultStartOffsetMinutesOptions?: number[];
   createdAt: Date;
@@ -33,8 +31,6 @@ const AutoScheduleConfigSchema = new mongoose.Schema(
     minGapMinutesAcrossAccountsOptions: { type: [Number], required: false, default: undefined },
     estimatedPublishDurationMinutes: { type: Number, required: true, default: 18 },
     estimatedPublishDurationMinutesOptions: { type: [Number], required: false, default: undefined },
-    jitterMinutes: { type: Number, required: true, default: 8 },
-    jitterMinutesOptions: { type: [Number], required: false, default: undefined },
     defaultStartOffsetMinutes: { type: Number, required: true, default: 10 },
     defaultStartOffsetMinutesOptions: { type: [Number], required: false, default: undefined },
   } as any,

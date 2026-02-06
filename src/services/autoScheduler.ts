@@ -4,6 +4,8 @@ import { PublishJobModel } from '../db/models/PublishJobModel';
 import { AutoScheduleConfigModel, AutoScheduleConfigDoc } from '../db/models/AutoScheduleConfigModel';
 import type { Logger } from '../engine/logger';
 
+const FIXED_JITTER_MINUTES = 0.5;
+
 interface AutoScheduleParams {
   startFromDate?: Date;
   articleIds?: string[];
@@ -49,7 +51,7 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
   const sameCompanyGapMs = minutesToMs(config.minGapMinutesSameCompanyPage);
   const sameAccountGapMs = minutesToMs(config.minGapMinutesCompanyPagesSameAccount);
   const acrossAccountsGapMs = minutesToMs(config.minGapMinutesAcrossAccounts);
-  const jitterMs = minutesToMs(config.jitterMinutes);
+  const jitterMs = minutesToMs(FIXED_JITTER_MINUTES);
 
   const nowMs = Date.now();
   const baseStartTime = startFromDate
@@ -200,7 +202,8 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
     if (!bestSlot) break;
 
     const companyKey = companyPageKey({ companyPageUrl: bestSlot.companyPageUrl, companyPageName: bestSlot.companyPageName });
-    const jitter = jitterMs > 0 ? Math.floor(Math.random() * jitterMs) : 0;
+    // Apply jitter symmetrically using the fixed jitter budget.
+    const jitter = jitterMs > 0 ? Math.floor((Math.random() * 2 - 1) * jitterMs) : 0;
     const scheduledMs = bestMs + jitter;
     const runAtDate = new Date(scheduledMs);
 
@@ -227,7 +230,6 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
             minGapMinutesCompanyPagesSameAccount: config.minGapMinutesCompanyPagesSameAccount,
             minGapMinutesAcrossAccounts: config.minGapMinutesAcrossAccounts,
             estimatedPublishDurationMinutes: config.estimatedPublishDurationMinutes,
-            jitterMinutes: config.jitterMinutes,
           },
           status: 'pending',
         });

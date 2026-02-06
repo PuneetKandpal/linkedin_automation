@@ -49,4 +49,13 @@ export const AccountsApi = {
       `/accounts/${encodeURIComponent(accountId)}/company-pages/${encodeURIComponent(pageId)}`,
       { method: 'DELETE' }
     ),
+
+  bulkDelete: (accountIds: string[]) =>
+    apiFetchJson<{ ok: boolean; deletedCount: number; accountIds: string[]; blockedAccountIds?: string[] }>(
+      '/accounts/bulk-delete',
+      {
+        method: 'POST',
+        body: JSON.stringify({ accountIds }),
+      }
+    ),
 };

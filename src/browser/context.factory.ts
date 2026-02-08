@@ -1,4 +1,4 @@
-import { chromium, Browser, BrowserContext } from '@playwright/test';
+import { chromium, Browser, BrowserContext } from 'playwright';
 import { Account, GlobalConfig } from '../config/types';
 import { Logger } from '../engine/logger';
 
@@ -17,7 +17,13 @@ export class BrowserContextFactory {
   ) {}
 
   async createContext(account: Account): Promise<BrowserContext> {
-    this.logger.info('Launching browser context', { accountId: account.accountId });
+    this.logger.info('Launching browser context', {
+      accountId: account.accountId,
+      headless: this.globalConfig.browser.headless,
+      slowMo: this.globalConfig.browser.slowMo,
+      hasStorageState: Boolean(account.storageState),
+      timezone: account.timezone,
+    });
 
     if (!account.storageState) {
       throw new Error(`Missing storageState for account: ${account.accountId}`);
@@ -38,6 +44,13 @@ export class BrowserContextFactory {
         ],
       };
 
+      this.logger.info('Browser launch options', {
+        headless: launchOptions.headless,
+        slowMo: launchOptions.slowMo,
+        hasProxy: useProxy && Boolean(account.proxy),
+        proxyServer: useProxy && account.proxy ? account.proxy.server : undefined,
+      });
+
       if (useProxy && account.proxy) {
         launchOptions.proxy = {
           server: account.proxy.server,
@@ -46,7 +59,11 @@ export class BrowserContextFactory {
         };
       }
 
+      this.logger.info('Launching Chromium browser...');
+
       this.browser = await chromium.launch(launchOptions);
+      this.logger.info('Chromium browser launched successfully');
+
       const context = await this.browser.newContext({
         viewport: { width: 1920, height: 1080 },
         locale: 'en-US',
@@ -55,9 +72,17 @@ export class BrowserContextFactory {
         bypassCSP: false,
         storageState: account.storageState as any,
       });
+      this.logger.info('Browser context created with storage state');
 
       const page = context.pages()[0] || (await context.newPage());
-      await page.goto('https://www.linkedin.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+      this.logger.info('Navigating to LinkedIn...', {
+        url: 'https://www.linkedin.com/',
+        timeout: this.globalConfig.browser.initialPageLoadTimeoutMs,
+        waitUntil: 'domcontentloaded',
+      });
+
+      await page.goto('https://www.linkedin.com/', { waitUntil: 'domcontentloaded', timeout: this.globalConfig.browser.initialPageLoadTimeoutMs });
+      this.logger.info('LinkedIn page loaded successfully');
       return context;
     };
 

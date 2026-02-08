@@ -3,6 +3,7 @@ export interface GlobalConfig {
     headless: boolean;
     slowMo: number;
     defaultTimeout: number;
+    initialPageLoadTimeoutMs: number;
   };
   execution: {
     maxArticlesPerRun: number;

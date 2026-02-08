@@ -1,8 +1,9 @@
 {
   "browser": {
-    "headless": true,
+    "headless": false,
     "slowMo": 0,
-    "defaultTimeout": 30000
+    "defaultTimeout": 30000,
+    "initialPageLoadTimeoutMs": 120000
   },
   "execution": {
     "maxArticlesPerRun": 1,

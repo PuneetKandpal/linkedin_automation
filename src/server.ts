@@ -1129,7 +1129,7 @@ async function main() {
   }));
 
   app.post('/auto-schedule/preview', asyncHandler(async (req: Request, res: Response) => {
-    const { startFromDate, articleCount, configOverride } = req.body as Record<string, unknown>;
+    const { startFromDate, articleCount, configOverride, accountId } = req.body as Record<string, unknown>;
 
     let parsedStartDate: Date | undefined;
     if (startFromDate) {
@@ -1149,19 +1149,29 @@ async function main() {
 
     const override = typeof configOverride === 'object' && configOverride !== null ? configOverride : undefined;
 
-    const result = await autoScheduleArticles({
-      startFromDate: parsedStartDate,
-      articleCount: parsedArticleCount,
-      configOverride: override as any,
-      dryRun: true,
-      logger,
-    });
+    const parsedAccountId = typeof accountId === 'string' && accountId.trim().length > 0
+      ? accountId.trim()
+      : undefined;
 
-    return res.json(result);
+    try {
+      const result = await autoScheduleArticles({
+        startFromDate: parsedStartDate,
+        articleCount: parsedArticleCount,
+        accountId: parsedAccountId,
+        configOverride: override as any,
+        dryRun: true,
+        logger,
+      });
+
+      return res.json(result);
+    } catch (e) {
+      const msg = (e as Error)?.message || String(e);
+      return res.status(400).json({ error: msg });
+    }
   }));
 
   app.post('/auto-schedule/execute', asyncHandler(async (req: Request, res: Response) => {
-    const { startFromDate, articleIds, configOverride, clientSuffix } = req.body as Record<string, unknown>;
+    const { startFromDate, articleIds, configOverride, clientSuffix, accountId } = req.body as Record<string, unknown>;
 
     let parsedStartDate: Date | undefined;
     if (startFromDate) {
@@ -1192,19 +1202,29 @@ async function main() {
       ? clientSuffix.trim()
       : undefined;
 
+    const parsedAccountId = typeof accountId === 'string' && accountId.trim().length > 0
+      ? accountId.trim()
+      : undefined;
+
     const override = typeof configOverride === 'object' && configOverride !== null ? configOverride : undefined;
 
-    const result = await autoScheduleArticles({
-      startFromDate: parsedStartDate,
-      articleIds: parsedArticleIds,
-      configOverride: override as any,
-      clientSuffix: parsedClientSuffix,
-      logger,
-    });
+    try {
+      const result = await autoScheduleArticles({
+        startFromDate: parsedStartDate,
+        articleIds: parsedArticleIds,
+        accountId: parsedAccountId,
+        configOverride: override as any,
+        clientSuffix: parsedClientSuffix,
+        logger,
+      });
 
-    logger.info('Auto-schedule executed', { scheduled: result.scheduled, jobIds: result.jobIds });
+      logger.info('Auto-schedule executed', { scheduled: result.scheduled, jobIds: result.jobIds });
 
-    return res.status(201).json(result);
+      return res.status(201).json(result);
+    } catch (e) {
+      const msg = (e as Error)?.message || String(e);
+      return res.status(400).json({ error: msg });
+    }
   }));
 
   app.use((err: unknown, req: Request, res: Response, next: unknown) => {

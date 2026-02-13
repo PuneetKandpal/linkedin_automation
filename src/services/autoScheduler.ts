@@ -10,6 +10,7 @@ interface AutoScheduleParams {
   startFromDate?: Date;
   articleIds?: string[];
   articleCount?: number;
+  accountId?: string;
   configOverride?: Partial<AutoScheduleConfigDoc>;
   clientSuffix?: string;
   dryRun?: boolean;
@@ -24,7 +25,7 @@ interface ScheduleSlot {
 }
 
 export async function autoScheduleArticles(params: AutoScheduleParams) {
-  const { startFromDate, articleIds, articleCount, configOverride, clientSuffix, dryRun, logger } = params;
+  const { startFromDate, articleIds, articleCount, accountId, configOverride, clientSuffix, dryRun, logger } = params;
 
   const stored = (await AutoScheduleConfigModel.findOne({ configId: 'default' }).lean()) as AutoScheduleConfigDoc | null;
   if (!stored) throw new Error('Auto-schedule configuration not found');
@@ -36,15 +37,22 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
     ? Math.floor(articleCount)
     : finalArticleIds.length;
 
-  const activeAccounts = (await AccountModel.find({
+  const query: Record<string, unknown> = {
     status: 'active',
     authStatus: 'valid',
     linkStatus: 'linked',
     'companyPages.0': { $exists: true },
-  }).lean()) as AccountDoc[];
+  };
+  if (typeof accountId === 'string' && accountId.trim().length > 0) {
+    query.accountId = accountId.trim();
+  }
+
+  const activeAccounts = (await AccountModel.find(query).lean()) as AccountDoc[];
 
   if (activeAccounts.length === 0) {
-    throw new Error('No active linked accounts with company pages found');
+    throw new Error(accountId
+      ? `Account not schedulable (missing/invalid auth or no company pages): ${accountId}`
+      : 'No active linked accounts with company pages found');
   }
 
   const publishMs = minutesToMs(config.estimatedPublishDurationMinutes);
@@ -52,6 +60,7 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
   const sameAccountGapMs = minutesToMs(config.minGapMinutesCompanyPagesSameAccount);
   const acrossAccountsGapMs = minutesToMs(config.minGapMinutesAcrossAccounts);
   const jitterMs = minutesToMs(FIXED_JITTER_MINUTES);
+  const accountGapMs = sameAccountGapMs + sameCompanyGapMs;
 
   const nowMs = Date.now();
   const baseStartTime = startFromDate
@@ -171,6 +180,7 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
 
   const createdJobIds: string[] = [];
   let maxEndMs = 0;
+  let scheduledCount = 0;
 
   for (let i = 0; i < effectiveCount; i++) {
     const articleId = articleIdsToSchedule[i];
@@ -187,7 +197,7 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
       const lastAccMs = lastPerAccount.get(slot.accountId) ?? 0;
       const lastCompMs = companyKey ? (lastPerCompany.get(companyKey) ?? 0) : 0;
 
-      const accReady = lastAccMs > 0 ? lastAccMs + sameAccountGapMs : 0;
+      const accReady = lastAccMs > 0 ? lastAccMs + accountGapMs : 0;
       const compReady = lastCompMs > 0 ? lastCompMs + sameCompanyGapMs : 0;
       const globalReady = lastGlobalMs > 0 ? lastGlobalMs + acrossAccountsGapMs : 0;
 
@@ -208,6 +218,8 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
     const runAtDate = new Date(scheduledMs);
 
     maxEndMs = Math.max(maxEndMs, scheduledMs + publishMs);
+
+    scheduledCount++;
 
     if (!dryRun) {
       if (typeof articleId === 'string' && !isPreviewArticle) {
@@ -258,7 +270,7 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
 
   return {
     jobIds: createdJobIds,
-    scheduled: dryRun ? effectiveCount : createdJobIds.length,
+    scheduled: dryRun ? scheduledCount : createdJobIds.length,
     estimatedFinishAt: estimatedFinishAtMs ? new Date(estimatedFinishAtMs).toISOString() : null,
     estimatedDurationMinutes,
   };

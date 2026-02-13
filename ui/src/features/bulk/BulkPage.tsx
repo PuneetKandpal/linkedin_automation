@@ -6,6 +6,7 @@ import { ArticlesApi, type CreateArticleInput } from '../../api/articles';
 import { JobsApi, type BulkJobItem } from '../../api/jobs';
 import { AutoScheduleApi } from '../../api/autoSchedule';
 import type { AutoScheduleConfigUpdate, AutoScheduleResult } from '../../api/autoSchedule';
+import type { Account } from '../../api/types';
 import { Badge, Button, Card, Field, InlineError, InlineSuccess, Modal, Note, Loader } from '../../components/ui';
 
 type Mode = 'accounts' | 'articles' | 'schedule';
@@ -248,6 +249,9 @@ export function BulkPage() {
   const [scheduleEstimate, setScheduleEstimate] = useState<AutoScheduleResult | null>(null);
   const [scheduleEstimateLoading, setScheduleEstimateLoading] = useState(false);
 
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [scheduleAccountId, setScheduleAccountId] = useState<string>('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -384,6 +388,7 @@ export function BulkPage() {
               articleIds: resp.articleIds,
               startFromDate: startIso,
               configOverride: scheduleOverride,
+              accountId: scheduleAccountId || undefined,
               clientSuffix: jobIdClientSuffix.trim() ? jobIdClientSuffix.trim() : undefined,
             });
           } catch (e) {
@@ -466,6 +471,16 @@ export function BulkPage() {
           }
         })();
       }
+
+      void (async () => {
+        try {
+          const acc = await AccountsApi.list();
+          setAccounts(acc);
+          setScheduleAccountId(prev => prev || (acc[0]?.accountId ?? ''));
+        } catch {
+          // ignore
+        }
+      })();
     }
     setConfirmModalOpen(true);
   }
@@ -707,6 +722,29 @@ export function BulkPage() {
                   />
                 </Field>
 
+                <Field label="Schedule for account">
+                  <select
+                    className="selectFancy"
+                    value={scheduleAccountId}
+                    onChange={e => setScheduleAccountId(e.target.value)}
+                  >
+                    {accounts.map(a => (
+                      <option
+                        key={a.accountId}
+                        value={a.accountId}
+                        disabled={
+                          a.status !== 'active' ||
+                          a.authStatus !== 'valid' ||
+                          a.linkStatus !== 'linked' ||
+                          (Array.isArray(a.companyPages) ? a.companyPages.length === 0 : true)
+                        }
+                      >
+                        {a.displayName} ({a.accountId}) — {a.status}{a.authStatus ? ` / ${a.authStatus}` : ''}{a.linkStatus ? ` / ${a.linkStatus}` : ''} — pages: {Array.isArray(a.companyPages) ? a.companyPages.length : 0}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
                 <Note text="Defaults come from the Auto-Schedule tab. Values here override only this run." />
 
                 <Field label="Start scheduling from" hint="Local time">
@@ -791,6 +829,7 @@ export function BulkPage() {
                             articleCount: parsedCount,
                             startFromDate: startIso,
                             configOverride: scheduleOverride,
+                            accountId: scheduleAccountId || undefined,
                           });
                           setScheduleEstimate(estimate);
                         } catch (e) {
@@ -813,6 +852,7 @@ export function BulkPage() {
                     </div>
                   ) : null}
                 </div>
+
               </>
             )}
           </div>

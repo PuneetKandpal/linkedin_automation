@@ -36,6 +36,7 @@ export type AutoScheduleConfigUpdate = {
 export type AutoScheduleExecuteParams = {
   startFromDate?: string;
   articleIds?: string[];
+  accountId?: string;
   configOverride?: AutoScheduleConfigUpdate;
   clientSuffix?: string;
 };
@@ -50,6 +51,7 @@ export type AutoScheduleResult = {
 export type AutoSchedulePreviewParams = {
   startFromDate?: string;
   articleCount?: number;
+  accountId?: string;
   configOverride?: AutoScheduleConfigUpdate;
 };
 

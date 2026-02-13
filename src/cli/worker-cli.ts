@@ -23,15 +23,16 @@ console.log(`
 const args = process.argv.slice(2);
 const mongodbUri = args.find((_, i) => args[i - 1] === '--mongodb-uri') || process.env.MONGODB_URI;
 const storageSecret = args.find((_, i) => args[i - 1] === '--secret') || process.env.STORAGE_STATE_SECRET;
+const accountId = args.find((_, i) => args[i - 1] === '--accountId' || args[i - 1] === '--account-id');
 
-if (!mongodbUri || !storageSecret) {
+if (!mongodbUri || !storageSecret || !accountId) {
   console.log('❌ Missing required configuration.');
   console.log('');
   console.log('Usage:');
-  console.log('  li-worker --mongodb-uri "<uri>" --secret "<secret>"');
+  console.log('  li-worker --mongodb-uri "<uri>" --secret "<secret>" --accountId "<accountId>"');
   console.log('');
   console.log('Or set environment variables:');
-  console.log('  MONGODB_URI="<uri>" STORAGE_STATE_SECRET="<secret>" li-worker');
+  console.log('  MONGODB_URI="<uri>" STORAGE_STATE_SECRET="<secret>" li-worker --accountId "<accountId>"');
   console.log('');
   process.exit(1);
 }

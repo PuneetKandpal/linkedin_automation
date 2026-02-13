@@ -3,10 +3,10 @@
  * LinkedIn Publisher Worker CLI
  * 
  * Usage:
- *   li-worker --mongodb-uri "..." --secret "..."
+ *   li-worker --mongodb-uri "..." --secret "..." --accountId "..."
  * 
  * Or with environment variables:
- *   MONGODB_URI="..." STORAGE_STATE_SECRET="..." li-worker
+ *   MONGODB_URI="..." STORAGE_STATE_SECRET="..." li-worker --accountId "..."
  */
 
 const path = require('path');

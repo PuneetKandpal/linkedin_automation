@@ -42,6 +42,14 @@ function normalizeCompanyPageUrl(value?: string | null): string | null {
   return trimmed.replace(/\/+$/, '').toLowerCase();
 }
 
+function parseAccountIdFromCli(argv: string[]): string | null {
+  const idx = argv.findIndex(a => a === '--accountId' || a === '--account-id');
+  if (idx < 0) return null;
+  const val = argv[idx + 1];
+  if (typeof val !== 'string' || val.trim().length === 0) return null;
+  return val.trim();
+}
+
 async function runOne(jobId: string, configDir: string): Promise<void> {
   const loader = new StaticConfigLoader(configDir);
   const cfg = loader.loadAll();
@@ -306,7 +314,22 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
 
 async function main() {
   const configDir = process.env.CONFIG_DIR || './config';
-  const pollMs = Number(process.env.WORKER_POLL_MS || 5000);
+  const pollMs = Number(process.env.WORKER_POLL_MS || 20000);
+
+  const cliAccountId = parseAccountIdFromCli(process.argv);
+
+  if (!cliAccountId) {
+    // eslint-disable-next-line no-console
+    console.error('Missing required --accountId <accountId>. Worker must be started for a single account.');
+    // eslint-disable-next-line no-console
+    console.error('Example: ts-node src/worker.ts --accountId acct_01');
+    // eslint-disable-next-line no-console
+    console.error('Example: node dist/worker.js --accountId acct_01');
+    process.exit(1);
+  }
+
+  // eslint-disable-next-line no-console
+  console.log('Worker → starting', { pollMs, accountId: cliAccountId });
 
   await connectMongo();
 
@@ -315,7 +338,7 @@ async function main() {
       const now = new Date();
 
       const job = await PublishJobModel.findOneAndUpdate(
-        { status: 'pending', runAt: { $lte: now } },
+        { status: 'pending', runAt: { $lte: now }, accountId: cliAccountId },
         { $set: { status: 'running', startedAt: new Date() } },
         { sort: { runAt: 1 }, new: true }
       ).lean();

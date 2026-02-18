@@ -150,16 +150,15 @@ function parseArticles(rows: Record<string, unknown>[]): ParsedResult<CreateArti
       pickCell(r, 'communityposttext', 'communityPostText', 'community post text')
     );
 
-    if (!articleId) errors.push({ row: rowNum, message: 'Missing articleId' });
     if (!language) errors.push({ row: rowNum, message: 'Missing language' });
     if (!title) errors.push({ row: rowNum, message: 'Missing title' });
     if (!markdownContent) errors.push({ row: rowNum, message: 'Missing markdownContent' });
     if (!coverImagePath) errors.push({ row: rowNum, message: 'Missing coverImagePath' });
     if (!communityPostText) errors.push({ row: rowNum, message: 'Missing communityPostText' });
 
-    if (articleId && language && title && markdownContent && coverImagePath && communityPostText) {
+    if (language && title && markdownContent && coverImagePath && communityPostText) {
       items.push({
-        articleId,
+        articleId: articleId || undefined,
         language,
         title,
         markdownContent,
@@ -273,7 +272,7 @@ export function BulkPage() {
       return 'Excel columns: accountId, displayName, email, timezone, status (active|disabled).';
     }
     if (mode === 'articles') {
-      return 'Excel columns: articleId, language, title, markdownContent, coverImagePath, communityPostText.';
+      return 'Excel columns: articleId (optional), language, title, markdownContent, coverImagePath, communityPostText.';
     }
     return 'Excel columns: jobId (optional), accountId, articleId, runAt (ISO), companyPageUrl, delayProfile (optional), typingProfile (optional).';
   }, [mode]);
@@ -373,6 +372,8 @@ export function BulkPage() {
           return;
         }
         const resp = await ArticlesApi.bulkCreate(result.items);
+        const createdCount = Array.isArray(resp.createdArticleIds) ? resp.createdArticleIds.length : resp.articleIds.length;
+        const updatedCount = Array.isArray(resp.updatedArticleIds) ? resp.updatedArticleIds.length : 0;
         if (markReady && resp.articleIds.length > 0) {
           await ArticlesApi.bulkMarkReady(resp.articleIds);
         }
@@ -403,8 +404,8 @@ export function BulkPage() {
           : '';
 
         const successMsg = autoScheduleResult
-          ? `Created ${resp.articleIds.length} articles${markReady ? ', marked ready,' : ''} and scheduled ${autoScheduleResult.scheduled} publish job${autoScheduleResult.scheduled === 1 ? '' : 's'}${finishText}`
-          : `Created ${resp.articleIds.length} articles${markReady ? ' and marked ready' : ''}`;
+          ? `Uploaded ${createdCount} new, updated ${updatedCount} articles${markReady ? ', marked ready,' : ''} and scheduled ${autoScheduleResult.scheduled} publish job${autoScheduleResult.scheduled === 1 ? '' : 's'}${finishText}`
+          : `Uploaded ${createdCount} new, updated ${updatedCount} articles${markReady ? ' and marked ready' : ''}`;
         setSuccess(successMsg);
         clearFileSelection();
         return;

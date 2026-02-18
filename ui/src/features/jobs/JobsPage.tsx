@@ -163,6 +163,8 @@ export function JobsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [filterAccountId, setFilterAccountId] = useState<string>('');
+
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(() => new Set());
 
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -179,6 +181,55 @@ export function JobsPage() {
   }, [sortedJobs, selectedJobIds]);
 
   const selectedCount = selectedJobIds.size;
+
+  const [bulkStatus, setBulkStatus] = useState<string>('');
+
+  const statusOptions = useMemo(
+    () => [
+      { value: '', label: 'Set status…' },
+      { value: 'pending', label: 'pending' },
+      { value: 'running', label: 'running' },
+      { value: 'success', label: 'success' },
+      { value: 'failed', label: 'failed' },
+      { value: 'canceled', label: 'canceled' },
+    ],
+    []
+  );
+
+  async function bulkSetStatusSelected() {
+    const ids = sortedJobs.filter(j => selectedJobIds.has(j.jobId)).map(j => j.jobId);
+    if (ids.length === 0) return;
+    if (!bulkStatus) {
+      window.alert('Select a status first.');
+      return;
+    }
+    const ok = window.confirm(`Set status to "${bulkStatus}" for ${ids.length} job${ids.length === 1 ? '' : 's'}?`);
+    if (!ok) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      await JobsApi.bulkSetStatus(ids, bulkStatus);
+      setSelectedJobIds(new Set());
+      setBulkStatus('');
+      await refreshAll();
+      setSuccess(`Updated ${ids.length} job${ids.length === 1 ? '' : 's'}`);
+    } catch (e) {
+      setError((e as ApiError).message || String(e));
+    }
+  }
+
+  async function setJobStatus(jobId: string, status: string) {
+    if (!status) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      await JobsApi.setStatus(jobId, status);
+      await refreshAll();
+      setSuccess('Job status updated');
+    } catch (e) {
+      setError((e as ApiError).message || String(e));
+    }
+  }
 
   async function bulkCancelSelected() {
     const selected = sortedJobs.filter(j => selectedJobIds.has(j.jobId));
@@ -263,7 +314,12 @@ export function JobsPage() {
     setError(null);
     setSuccess(null);
     try {
-      const [j, a, art, cfg] = await Promise.all([JobsApi.list(), AccountsApi.list(), ArticlesApi.list(), ConfigApi.profiles()]);
+      const [j, a, art, cfg] = await Promise.all([
+        JobsApi.list({ accountId: filterAccountId || undefined }),
+        AccountsApi.list(),
+        ArticlesApi.list(),
+        ConfigApi.profiles(),
+      ]);
       setJobs(j);
       setAccounts(a);
       setArticles(art);
@@ -286,7 +342,7 @@ export function JobsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filterAccountId]);
 
   async function submitBulk() {
     setError(null);
@@ -322,6 +378,19 @@ export function JobsPage() {
   useEffect(() => {
     void refreshAll();
   }, [refreshAll]);
+
+  const filterAccountOptions = useMemo(() => {
+    const opts: SearchOption[] = [{ value: '', label: 'All accounts' }];
+    opts.push(
+      ...accounts
+        .filter(a => a.status === 'active')
+        .map(a => ({
+          value: a.accountId,
+          label: `${a.displayName} (${a.accountId})`,
+        }))
+    );
+    return opts;
+  }, [accounts]);
 
   const accountOptions = useMemo(() =>
     accounts
@@ -540,6 +609,32 @@ export function JobsPage() {
         title="Publish Jobs"
         right={
           <div className="row">
+            <div style={{ minWidth: 260 }}>
+              <SearchSelect
+                value={filterAccountId}
+                options={filterAccountOptions}
+                placeholder="Filter by account…"
+                onChange={value => setFilterAccountId(value)}
+              />
+            </div>
+            {selectedCount > 0 ? (
+              <>
+                <select
+                  value={bulkStatus}
+                  onChange={e => setBulkStatus(e.target.value)}
+                  disabled={loading}
+                >
+                  {statusOptions.map(o => (
+                    <option key={o.value} value={o.value} disabled={!o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <Button variant="ghost" onClick={() => void bulkSetStatusSelected()} disabled={loading || !bulkStatus}>
+                  Apply status ({selectedCount})
+                </Button>
+              </>
+            ) : null}
             {selectedCount > 0 ? (
               <>
                 <Button variant="ghost" onClick={() => void bulkCancelSelected()} disabled={loading}>
@@ -660,6 +755,21 @@ export function JobsPage() {
                   </td>
                   <td>
                     <div className="row">
+                      <select
+                        value=""
+                        onChange={e => {
+                          const next = e.target.value;
+                          e.currentTarget.value = '';
+                          if (next) void setJobStatus(j.jobId, next);
+                        }}
+                        disabled={loading}
+                      >
+                        {statusOptions.map(o => (
+                          <option key={o.value} value={o.value} disabled={!o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
                       {j.status === 'failed' ? (
                         <Button variant="ghost" onClick={() => openFailure(j)}>
                           View

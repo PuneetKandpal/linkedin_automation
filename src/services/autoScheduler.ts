@@ -78,6 +78,8 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
   const lastPerCompany = new Map<string, number>();
   const articlesPerCompany = new Map<string, number>();
   let lastGlobalMs = 0;
+  // Disable global serialization when across-accounts gap is 0 (parallel scheduling mode)
+  const useGlobalConstraint = acrossAccountsGapMs > 0;
 
   for (const job of jobWindowJobs as any[]) {
     const runAtMs = job.runAt ? new Date(job.runAt).getTime() : 0;
@@ -104,7 +106,9 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
       }
     }
 
-    lastGlobalMs = Math.max(lastGlobalMs, busyUntilMs);
+    if (useGlobalConstraint) {
+      lastGlobalMs = Math.max(lastGlobalMs, busyUntilMs);
+    }
   }
 
   const idleAgg = await PublishJobModel.aggregate([
@@ -119,17 +123,9 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
     }
   }
 
-  const idleSorted = [...activeAccounts].sort((a, b) => {
-    const ta = lastSuccessPerAccount.get(a.accountId) ?? 0;
-    const tb = lastSuccessPerAccount.get(b.accountId) ?? 0;
-    return ta - tb;
-  });
-
-  const idleRank = new Map<string, number>();
-  idleSorted.forEach((acc, idx) => idleRank.set(acc.accountId, idx));
-
+  // Build slots without idle-rank bias for true parallel scheduling
   const slots: ScheduleSlot[] = [];
-  for (const account of idleSorted) {
+  for (const account of activeAccounts) {
     const companyPages = (account as any).companyPages || [];
     for (const page of companyPages) {
       const companyKey = companyPageKey({ companyPageUrl: page.url, companyPageName: page.name });
@@ -139,7 +135,7 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
         accountId: account.accountId,
         companyPageUrl: page.url,
         companyPageName: page.name,
-        accountIdleRank: idleRank.get(account.accountId) ?? 0,
+        accountIdleRank: 0, // No idle rank bias
       });
     }
   }
@@ -199,11 +195,11 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
 
       const accReady = lastAccMs > 0 ? lastAccMs + accountGapMs : 0;
       const compReady = lastCompMs > 0 ? lastCompMs + sameCompanyGapMs : 0;
-      const globalReady = lastGlobalMs > 0 ? lastGlobalMs + acrossAccountsGapMs : 0;
+      const globalReady = useGlobalConstraint && lastGlobalMs > 0 ? lastGlobalMs + acrossAccountsGapMs : 0;
 
       const candidate = Math.max(baseStartTime, accReady, compReady, globalReady, nowMs);
 
-      if (!bestSlot || candidate < bestMs || (candidate === bestMs && slot.accountIdleRank < bestSlot.accountIdleRank)) {
+      if (!bestSlot || candidate < bestMs) {
         bestSlot = slot;
         bestMs = candidate;
       }
@@ -256,7 +252,9 @@ export async function autoScheduleArticles(params: AutoScheduleParams) {
     }
 
     lastPerAccount.set(bestSlot.accountId, scheduledMs + publishMs);
-    lastGlobalMs = scheduledMs + publishMs;
+    if (useGlobalConstraint) {
+      lastGlobalMs = scheduledMs + publishMs;
+    }
     if (companyKey) {
       lastPerCompany.set(companyKey, scheduledMs + publishMs);
       articlesPerCompany.set(companyKey, (articlesPerCompany.get(companyKey) ?? 0) + 1);

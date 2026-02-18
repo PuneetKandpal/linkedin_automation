@@ -80,6 +80,10 @@ function minutesToMs(mins: unknown): number {
   return Math.floor(mins * 60_000);
 }
 
+function generateArticleId(): string {
+  return `art_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 async function main() {
   const logger = new Logger({ latestLogPath: './output/logs/latest_api.log' });
 
@@ -369,9 +373,8 @@ async function main() {
     const { articleId, language, title, markdownContent, coverImagePath, communityPostText } =
       req.body as Record<string, unknown>;
 
-    if (typeof articleId !== 'string' || articleId.trim().length === 0) {
-      return res.status(400).json({ error: 'Missing articleId' });
-    }
+    const requestedId = typeof articleId === 'string' ? articleId.trim() : '';
+    const finalArticleId = requestedId.length > 0 ? requestedId : generateArticleId();
     if (typeof language !== 'string' || language.trim().length === 0) {
       return res.status(400).json({ error: 'Missing language' });
     }
@@ -385,18 +388,31 @@ async function main() {
       return res.status(400).json({ error: 'coverImagePath must be an http(s) URL' });
     }
 
-    const existing = await ArticleModel.findOne({ articleId }).lean();
+    const existing = requestedId.length > 0 ? await ArticleModel.findOne({ articleId: finalArticleId }).lean() : null;
     if (existing) return res.status(409).json({ error: 'Article already exists' });
 
-    const created = await ArticleModel.create({
-      articleId,
-      language,
-      title,
-      markdownContent,
-      coverImagePath,
-      communityPostText,
-      status: 'draft',
-    });
+    let created;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        created = await ArticleModel.create({
+          articleId: attempt === 0 ? finalArticleId : generateArticleId(),
+          language,
+          title,
+          markdownContent,
+          coverImagePath,
+          communityPostText,
+          status: 'draft',
+        });
+        break;
+      } catch (err) {
+        const e: any = err;
+        if (e && e.code === 11000) {
+          continue;
+        }
+        throw err;
+      }
+    }
+    if (!created) throw new Error('Failed to create article');
 
     logger.info('Article created', { articleId: created.articleId });
     return res.status(201).json({ articleId: created.articleId });
@@ -410,16 +426,17 @@ async function main() {
     }
 
     const createdIds: string[] = [];
+    const updatedIds: string[] = [];
     for (let i = 0; i < items.length; i++) {
       const it = items[i] as Record<string, unknown>;
-      const articleId = normalizeText(it.articleId);
+      const requestedArticleId = normalizeText(it.articleId);
+      const articleId = requestedArticleId || generateArticleId();
       const language = normalizeText(it.language);
       const title = normalizeText(it.title);
       const markdownContent = normalizeText(it.markdownContent);
       const coverImagePath = it.coverImagePath;
       const communityPostText = it.communityPostText;
 
-      if (!articleId) return res.status(400).json({ error: `Item[${i}] missing articleId`, itemIndex: i, field: 'articleId' });
       if (!language) return res.status(400).json({ error: `Item[${i}] missing language`, itemIndex: i, field: 'language' });
       if (!title) return res.status(400).json({ error: `Item[${i}] missing title`, itemIndex: i, field: 'title' });
       if (!markdownContent) return res.status(400).json({ error: `Item[${i}] missing markdownContent`, itemIndex: i, field: 'markdownContent' });
@@ -431,21 +448,49 @@ async function main() {
       }
 
       const existing = await ArticleModel.findOne({ articleId }).lean();
-      if (existing) continue;
-
-      await ArticleModel.create({
-        articleId,
-        language,
-        title,
-        markdownContent,
-        coverImagePath,
-        communityPostText,
-        status: 'draft',
-      });
-      createdIds.push(articleId);
+      if (existing) {
+        await ArticleModel.updateOne(
+          { articleId },
+          {
+            $set: {
+              language,
+              title,
+              markdownContent,
+              coverImagePath,
+              communityPostText,
+            },
+          }
+        );
+        updatedIds.push(articleId);
+      } else {
+        let created;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            created = await ArticleModel.create({
+              articleId: attempt === 0 ? articleId : generateArticleId(),
+              language,
+              title,
+              markdownContent,
+              coverImagePath,
+              communityPostText,
+              status: 'draft',
+            });
+            break;
+          } catch (err) {
+            const e: any = err;
+            if (e && e.code === 11000) {
+              continue;
+            }
+            throw err;
+          }
+        }
+        if (!created) throw new Error(`Failed to create article for item[${i}]`);
+        createdIds.push(created.articleId);
+      }
     }
 
-    return res.status(201).json({ articleIds: createdIds });
+    const articleIds = Array.from(new Set([...createdIds, ...updatedIds]));
+    return res.status(201).json({ articleIds, createdArticleIds: createdIds, updatedArticleIds: updatedIds });
   }));
 
   app.post('/articles/ready/bulk', asyncHandler(async (req: Request, res: Response) => {
@@ -609,7 +654,10 @@ async function main() {
 
   app.get('/publish-jobs', asyncHandler(async (req: Request, res: Response) => {
     const status = req.query.status as string | undefined;
-    const query: Record<string, unknown> = status ? { status } : {};
+    const accountId = req.query.accountId as string | undefined;
+    const query: Record<string, unknown> = {};
+    if (status) query.status = status;
+    if (accountId) query.accountId = accountId;
     const jobs = await PublishJobModel.find(query).sort({ runAt: 1 }).lean();
     return res.json(jobs);
   }));
@@ -702,23 +750,32 @@ async function main() {
     }
 
     const accountIds = Array.from(new Set(normalized.map(n => n.accountId)));
-    const companyKeys = Array.from(
-      new Set(
-        normalized
-          .map(n => companyPageKeyFrom(n))
-          .filter((v): v is string => typeof v === 'string' && v.length > 0)
-      )
-    );
+    const byAccount = new Map<string, typeof normalized>();
+    for (const item of normalized) {
+      const list = byAccount.get(item.accountId) || [];
+      list.push(item);
+      byAccount.set(item.accountId, list);
+    }
+
+    // Interleave items across accounts so bulk scheduling does not fully process one account before another.
+    const interleaved: typeof normalized = [];
+    const queues = Array.from(byAccount.values()).map(list => [...list]);
+    for (;;) {
+      let added = 0;
+      for (const q of queues) {
+        const next = q.shift();
+        if (next) {
+          interleaved.push(next);
+          added++;
+        }
+      }
+      if (added === 0) break;
+    }
 
     const existingJobs = await PublishJobModel.find(
       {
         status: { $in: ['pending', 'running'] },
-        $or: [
-          { accountId: { $in: accountIds } },
-          ...(companyKeys.length > 0
-            ? [{ $or: companyKeys.map(k => (k.startsWith('url:') ? { companyPageUrl: k.slice(4) } : { companyPageName: k.slice(5) })) }]
-            : []),
-        ],
+        accountId: { $in: accountIds },
       },
       { jobId: 1, accountId: 1, runAt: 1, companyPageUrl: 1, companyPageName: 1 }
     )
@@ -734,16 +791,17 @@ async function main() {
         lastPerAccount.set(j.accountId, Math.max(lastPerAccount.get(j.accountId) ?? 0, t));
       }
       const key = companyPageKeyFrom({ companyPageUrl: j.companyPageUrl, companyPageName: j.companyPageName });
-      if (key && j.runAt) {
+      if (key && j.runAt && typeof j.accountId === 'string') {
         const t = new Date(j.runAt).getTime();
-        lastPerCompany.set(key, Math.max(lastPerCompany.get(key) ?? 0, t));
+        const scopedKey = `${j.accountId}|${key}`;
+        lastPerCompany.set(scopedKey, Math.max(lastPerCompany.get(scopedKey) ?? 0, t));
       }
     }
 
     const createdJobIds: string[] = [];
     const computed: Array<{ jobId: string; runAt: string; requestedRunAt: string; accountId: string; articleId: string }> = [];
 
-    for (const n of normalized) {
+    for (const n of interleaved) {
       const account = (await AccountModel.findOne({ accountId: n.accountId }).lean()) as AccountDoc | null;
       if (!account) {
         return res.status(404).json({ error: `Account not found: ${n.accountId}`, itemIndex: n.idx, field: 'accountId' });
@@ -769,10 +827,11 @@ async function main() {
 
       const existingForArticle = await PublishJobModel.findOne({
         articleId: n.articleId,
+        accountId: n.accountId,
         status: { $in: ['pending', 'running'] },
       }).lean();
       if (existingForArticle) {
-        return res.status(409).json({ error: `Article already has a pending/running job: ${n.articleId}`, itemIndex: n.idx, field: 'articleId' });
+        return res.status(409).json({ error: `Article already has a pending/running job for this account: ${n.articleId}`, itemIndex: n.idx, field: 'articleId' });
       }
 
       const requestedMs = n.requestedRunAt.getTime();
@@ -780,8 +839,9 @@ async function main() {
       const accReady = lastAccMs > 0 ? lastAccMs + minGapAccountMs : 0;
 
       const companyKey = companyPageKeyFrom(n);
-      const lastCompMs = companyKey ? (lastPerCompany.get(companyKey) ?? 0) : 0;
-      const compReady = companyKey && lastCompMs > 0 ? lastCompMs + minGapCompanyMs : 0;
+      const scopedCompanyKey = companyKey ? `${n.accountId}|${companyKey}` : undefined;
+      const lastCompMs = scopedCompanyKey ? (lastPerCompany.get(scopedCompanyKey) ?? 0) : 0;
+      const compReady = scopedCompanyKey && lastCompMs > 0 ? lastCompMs + minGapCompanyMs : 0;
 
       const scheduledMs = Math.max(requestedMs, accReady, compReady, Date.now());
       const runAtDate = new Date(scheduledMs);
@@ -809,7 +869,7 @@ async function main() {
       );
 
       lastPerAccount.set(n.accountId, scheduledMs);
-      if (companyKey) lastPerCompany.set(companyKey, scheduledMs);
+      if (scopedCompanyKey) lastPerCompany.set(scopedCompanyKey, scheduledMs);
 
       createdJobIds.push(n.jobId);
       computed.push({
@@ -859,8 +919,8 @@ async function main() {
 
     const article = (await ArticleModel.findOne({ articleId }).lean()) as ArticleDoc | null;
     if (!article) return res.status(404).json({ error: 'Article not found' });
-    if (article.status !== 'ready' && article.status !== 'published') {
-      return res.status(400).json({ error: 'Article must be ready or published before scheduling' });
+    if (article.status !== 'ready' && article.status !== 'published' && article.status !== 'scheduled') {
+      return res.status(400).json({ error: 'Article must be ready, scheduled, or published before scheduling' });
     }
     if (!article.markdownContent || article.markdownContent.trim().length === 0) {
       return res.status(400).json({ error: 'Article markdownContent is empty' });
@@ -880,6 +940,7 @@ async function main() {
 
     const existingJob = await PublishJobModel.findOne({
       articleId,
+      accountId,
       status: { $in: ['pending', 'running'] },
     }).lean();
     if (existingJob) {
@@ -949,13 +1010,111 @@ async function main() {
     ).lean();
     if (!job) return res.status(404).json({ error: 'Job not found or not cancelable' });
 
-    // If the article was marked scheduled because of this job, revert to ready.
-    await ArticleModel.updateOne(
-      { articleId: (jobToCancel as any).articleId, status: 'scheduled' },
-      { $set: { status: 'ready' } }
-    );
+    const stillPending = await PublishJobModel.findOne({
+      articleId: (jobToCancel as any).articleId,
+      status: { $in: ['pending', 'running'] },
+    }).lean();
+    if (!stillPending) {
+      await ArticleModel.updateOne(
+        { articleId: (jobToCancel as any).articleId, status: 'scheduled' },
+        { $set: { status: 'ready' } }
+      );
+    }
 
     return res.json(job);
+  }));
+
+  app.patch('/publish-jobs/:jobId/status', asyncHandler(async (req: Request, res: Response) => {
+    const jobId = req.params.jobId;
+    const body = req.body as Record<string, unknown>;
+    const status = body.status;
+
+    const allowed = new Set(['pending', 'running', 'success', 'failed', 'canceled']);
+    if (typeof status !== 'string' || !allowed.has(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const existing = await PublishJobModel.findOne({ jobId }).lean();
+    if (!existing) return res.status(404).json({ error: 'Job not found' });
+
+    const now = new Date();
+
+    const $set: Record<string, unknown> = { status };
+    const $unset: Record<string, unknown> = {};
+
+    if (status === 'pending') {
+      $unset.startedAt = 1;
+      $unset.finishedAt = 1;
+      $unset.error = 1;
+      $unset.errorCode = 1;
+      $unset.errorStep = 1;
+    }
+
+    if (status === 'running') {
+      $set.startedAt = (existing as any).startedAt || now;
+      $unset.finishedAt = 1;
+    }
+
+    if (status === 'success' || status === 'failed' || status === 'canceled') {
+      $set.finishedAt = (existing as any).finishedAt || now;
+      if (!(existing as any).startedAt) {
+        $set.startedAt = (existing as any).runAt || now;
+      }
+    }
+
+    const update: Record<string, unknown> = { $set };
+    if (Object.keys($unset).length > 0) update.$unset = $unset;
+
+    const updated = await PublishJobModel.findOneAndUpdate({ jobId }, update, { new: true }).lean();
+    return res.json(updated);
+  }));
+
+  app.post('/publish-jobs/status/bulk', asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    const jobIdsRaw = (body.jobIds ?? body.items ?? body.ids) as unknown;
+    const status = body.status;
+
+    const allowed = new Set(['pending', 'running', 'success', 'failed', 'canceled']);
+    if (typeof status !== 'string' || !allowed.has(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    if (!Array.isArray(jobIdsRaw) || jobIdsRaw.length === 0) {
+      return res.status(400).json({ error: 'Missing jobIds array' });
+    }
+
+    const jobIds = Array.from(new Set(jobIdsRaw.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map(v => v.trim())));
+    if (jobIds.length === 0) return res.status(400).json({ error: 'jobIds array is empty or contains invalid values' });
+
+    const jobs = await PublishJobModel.find({ jobId: { $in: jobIds } }).lean();
+    const foundIds = new Set((jobs as any[]).map(j => j.jobId));
+    const missing = jobIds.filter(id => !foundIds.has(id));
+
+    const now = new Date();
+    const $set: Record<string, unknown> = { status };
+    const $unset: Record<string, unknown> = {};
+
+    if (status === 'pending') {
+      $unset.startedAt = 1;
+      $unset.finishedAt = 1;
+      $unset.error = 1;
+      $unset.errorCode = 1;
+      $unset.errorStep = 1;
+    }
+
+    if (status === 'running') {
+      $set.startedAt = now;
+      $unset.finishedAt = 1;
+    }
+
+    if (status === 'success' || status === 'failed' || status === 'canceled') {
+      $set.finishedAt = now;
+    }
+
+    const update: Record<string, unknown> = { $set };
+    if (Object.keys($unset).length > 0) update.$unset = $unset;
+
+    await PublishJobModel.updateMany({ jobId: { $in: jobIds } }, update);
+    return res.json({ ok: true, jobIds, missing, status });
   }));
 
   app.post('/publish-jobs/cancel/bulk', asyncHandler(async (req: Request, res: Response) => {
@@ -989,10 +1148,20 @@ async function main() {
     // For canceled jobs, revert scheduled articles back to ready.
     const articleIds = Array.from(new Set((toCancel as any[]).map(j => j.articleId).filter(Boolean)));
     if (articleIds.length > 0) {
-      await ArticleModel.updateMany(
-        { articleId: { $in: articleIds }, status: 'scheduled' },
-        { $set: { status: 'ready' } }
-      );
+      const stillScheduledIds: string[] = [];
+      for (const articleId of articleIds) {
+        const stillPending = await PublishJobModel.findOne({
+          articleId,
+          status: { $in: ['pending', 'running'] },
+        }).lean();
+        if (!stillPending) stillScheduledIds.push(articleId);
+      }
+      if (stillScheduledIds.length > 0) {
+        await ArticleModel.updateMany(
+          { articleId: { $in: stillScheduledIds }, status: 'scheduled' },
+          { $set: { status: 'ready' } }
+        );
+      }
     }
 
     return res.json({ ok: true, canceledJobIds: jobIds, missing });

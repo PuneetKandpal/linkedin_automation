@@ -29,8 +29,13 @@ export type BulkJobItem = {
 };
 
 export const JobsApi = {
-  list: (status?: string) => {
-    const q = status ? `?status=${encodeURIComponent(status)}` : '';
+  list: (params?: { status?: string; accountId?: string }) => {
+    const status = params?.status;
+    const accountId = params?.accountId;
+    const parts: string[] = [];
+    if (status) parts.push(`status=${encodeURIComponent(status)}`);
+    if (accountId) parts.push(`accountId=${encodeURIComponent(accountId)}`);
+    const q = parts.length > 0 ? `?${parts.join('&')}` : '';
     return apiFetchJson<PublishJob[]>(`/publish-jobs${q}`);
   },
 
@@ -70,6 +75,21 @@ export const JobsApi = {
       {
         method: 'POST',
         body: JSON.stringify({ jobIds }),
+      }
+    ),
+
+  setStatus: (jobId: string, status: string) =>
+    apiFetchJson<PublishJob>(`/publish-jobs/${encodeURIComponent(jobId)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  bulkSetStatus: (jobIds: string[], status: string) =>
+    apiFetchJson<{ ok: boolean; jobIds: string[]; missing: string[]; status: string }>(
+      '/publish-jobs/status/bulk',
+      {
+        method: 'POST',
+        body: JSON.stringify({ jobIds, status }),
       }
     ),
 };

@@ -2,7 +2,7 @@ import { apiFetchJson } from './http';
 import type { Article } from './types';
 
 export type CreateArticleInput = {
-  articleId: string;
+  articleId?: string;
   language: string;
   title: string;
   markdownContent: string;
@@ -25,7 +25,7 @@ export const ArticlesApi = {
     }),
 
   bulkCreate: (items: CreateArticleInput[]) =>
-    apiFetchJson<{ articleIds: string[] }>('/articles/bulk', {
+    apiFetchJson<{ articleIds: string[]; createdArticleIds?: string[]; updatedArticleIds?: string[] }>('/articles/bulk', {
       method: 'POST',
       body: JSON.stringify({ items }),
     }),

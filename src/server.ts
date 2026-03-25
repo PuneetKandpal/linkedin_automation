@@ -12,6 +12,7 @@ import type { AccountDoc } from './db/models/AccountModel';
 import type { ArticleDoc } from './db/models/ArticleModel';
 import { StaticConfigLoader } from './config/static-loader';
 import { autoScheduleArticles } from './services/autoScheduler';
+import { startArticleCleanup } from './services/articleCleanup';
 import path from 'path';
 import fs from 'fs';
 
@@ -1396,6 +1397,29 @@ async function main() {
     }
   }));
 
+  app.get('/cleanup/articles', asyncHandler(async (req: Request, res: Response) => {
+    const { deleteOldArticles, getCleanupAuthKey } = await import('./services/articleCleanup');
+    
+    const authKey = req.query.key as string;
+    if (!authKey || authKey !== getCleanupAuthKey()) {
+      return res.status(401).json({ error: 'Invalid or missing auth key' });
+    }
+    
+    try {
+      const result = await deleteOldArticles();
+      return res.json({ 
+        message: 'Article cleanup completed',
+        articlesDeleted: result.articlesDeleted,
+        jobsDeleted: result.jobsDeleted,
+        issuesDeleted: result.issuesDeleted,
+        note: `Deleted articles older than 48 hours and all related publish jobs and account issues`
+      });
+    } catch (error) {
+      logger.error('Manual article cleanup failed', { error: String(error) });
+      return res.status(500).json({ error: 'Cleanup failed' });
+    }
+  }));
+
   app.use((err: unknown, req: Request, res: Response, next: unknown) => {
     void req;
     void next;
@@ -1415,7 +1439,8 @@ async function main() {
           req.path.startsWith('/articles') || 
           req.path.startsWith('/publish-jobs') ||
           req.path.startsWith('/config') ||
-          req.path.startsWith('/auto-schedule')) {
+          req.path.startsWith('/auto-schedule') ||
+          req.path.startsWith('/cleanup')) {
         return res.status(404).json({ error: 'Not found' });
       }
       res.sendFile(path.join(uiBuildPath, 'index.html'));
@@ -1433,6 +1458,8 @@ async function main() {
     .then(() => {
       // eslint-disable-next-line no-console
       console.log('MongoDB connected');
+      // Start article cleanup service
+      startArticleCleanup();
     })
     .catch(err => {
       // eslint-disable-next-line no-console

@@ -335,24 +335,8 @@ async function main() {
       return res.status(400).json({ error: 'accountIds array is empty or contains invalid values' });
     }
 
-    const jobsForAccounts = await PublishJobModel.find(
-      { accountId: { $in: accountIds } },
-      { jobId: 1, accountId: 1, status: 1 }
-    ).lean();
-
-    if ((jobsForAccounts as any[]).length > 0) {
-      const counts = new Map<string, number>();
-      for (const j of jobsForAccounts as any[]) {
-        if (typeof j.accountId === 'string') {
-          counts.set(j.accountId, (counts.get(j.accountId) ?? 0) + 1);
-        }
-      }
-      const blocked = accountIds.filter(id => (counts.get(id) ?? 0) > 0);
-      return res.status(400).json({
-        error: 'Cannot delete accounts while publish jobs exist. Delete all publish jobs for these accounts first.',
-        blockedAccountIds: blocked,
-      });
-    }
+    await PublishJobModel.deleteMany({ accountId: { $in: accountIds } });
+    await AccountIssueModel.deleteMany({ accountId: { $in: accountIds } });
 
     const del = await AccountModel.deleteMany({ accountId: { $in: accountIds } });
     return res.json({ ok: true, deletedCount: (del as any).deletedCount ?? 0, accountIds });

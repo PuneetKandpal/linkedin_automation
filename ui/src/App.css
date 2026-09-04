@@ -1244,3 +1244,13 @@ body,
     flex: 1;
   }
  }
+
+.exportPresets {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exportPresets .btn {
+  padding: 6px 12px;
+  font-size: 12px;
+}

@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import * as XLSX from 'xlsx';
 import type { ApiError } from '../../api/http';
 import { AccountsApi } from '../../api/accounts';
 import { ArticlesApi } from '../../api/articles';
@@ -101,6 +102,56 @@ function CopyButton(props: { value: string; label?: string; title?: string }) {
       {copied ? 'Copied' : label}
     </button>
   );
+}
+
+/** "YYYY-MM-DD" in local time, the format <input type="date"> expects. */
+function toDateInputValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function daysAgoDateInput(days: number): string {
+  return toDateInputValue(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
+}
+
+/** Start of the given local day, or null when the bound is left empty. */
+function startOfDay(value: string): number | null {
+  if (!value) return null;
+  const d = new Date(`${value}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d.getTime();
+}
+
+/** End of the given local day, inclusive. */
+function endOfDay(value: string): number | null {
+  if (!value) return null;
+  const d = new Date(`${value}T23:59:59.999`);
+  return Number.isNaN(d.getTime()) ? null : d.getTime();
+}
+
+/** First two meaningful lines of the article body, with light markdown stripped. */
+function articleExcerpt(markdown?: string): string {
+  if (!markdown) return '';
+  const lines = markdown
+    .split(/\r?\n/)
+    .map(line =>
+      line
+        .replace(/^\s{0,3}#{1,6}\s+/, '')          // headings
+        .replace(/^\s{0,3}>\s?/, '')               // blockquotes
+        .replace(/^\s{0,3}[-*+]\s+/, '')           // bullets
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, '')      // images
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')   // links -> their text
+        .replace(/[*_`~]/g, '')                   // emphasis marks
+        .trim()
+    )
+    .filter(line => line.length > 0);
+  return lines.slice(0, 2).join('\n');
+}
+
+/** Excel keeps real dates sortable; anything unparseable is left blank. */
+function toExcelDate(iso?: string): Date | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
 function defaultLocalDateTime(minutesFromNow: number): string {
@@ -417,6 +468,12 @@ export function JobsPage() {
   const [delayProfiles, setDelayProfiles] = useState<string[]>([]);
   const [typingProfiles, setTypingProfiles] = useState<string[]>([]);
 
+  const [exportOpen, setExportOpen] = useState(false);
+  // Defaults to the last day of scheduled jobs; both bounds may be cleared for "all time".
+  const [exportFrom, setExportFrom] = useState(() => daysAgoDateInput(1));
+  const [exportTo, setExportTo] = useState(() => daysAgoDateInput(0));
+  const [exportScope, setExportScope] = useState<'range' | 'view'>('range');
+
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkJson, setBulkJson] = useState('');
   const [bulkMinGapAccount, setBulkMinGapAccount] = useState(20);
@@ -554,6 +611,88 @@ export function JobsPage() {
     },
     [articlesMap]
   );
+
+  /**
+   * Jobs record the company page by URL and name, not by id, so recover the id
+   * from the owning account's configured pages.
+   */
+  const companyPageIdFor = useCallback(
+    (job: PublishJob): string => {
+      const target = normalizeCompanyPageUrl(job.companyPageUrl);
+      const pages = accountsMap.get(job.accountId)?.companyPages || [];
+      if (target) {
+        const byUrl = pages.find(p => normalizeCompanyPageUrl(p.url) === target);
+        if (byUrl) return byUrl.pageId;
+      }
+      const name = (job.companyPageName || '').trim().toLowerCase();
+      if (name) {
+        const byName = pages.find(p => p.name.trim().toLowerCase() === name);
+        if (byName) return byName.pageId;
+      }
+      return '';
+    },
+    [accountsMap]
+  );
+
+  // Rows the export will write: either everything in the date window, or exactly
+  // what the current status/search/account filters are showing.
+  const exportJobs = useMemo(() => {
+    const base = exportScope === 'view' ? filteredJobs : jobs;
+    const from = startOfDay(exportFrom);
+    const to = endOfDay(exportTo);
+    if (from === null && to === null) return base;
+    return base.filter(j => {
+      const runAt = new Date(j.runAt).getTime();
+      if (Number.isNaN(runAt)) return false;
+      if (from !== null && runAt < from) return false;
+      if (to !== null && runAt > to) return false;
+      return true;
+    });
+  }, [exportScope, filteredJobs, jobs, exportFrom, exportTo]);
+
+  function downloadExcel() {
+    const rows = exportJobs.map(j => {
+      const article = articlesMap.get(j.articleId);
+      const succeeded = j.status === 'success';
+      return {
+        'Job ID': j.jobId,
+        Status: j.status,
+        'Published For': accountsMap.get(j.accountId)?.displayName || j.accountId,
+        'Published On': j.companyPageName || j.companyPageUrl || '',
+        'Page ID': companyPageIdFor(j),
+        'Page URL': j.companyPageUrl || '',
+        'Article Title': article?.title || j.articleId,
+        'Article Preview': articleExcerpt(article?.markdownContent),
+        // Only a successful job actually published, so the time and link stay
+        // blank for everything else rather than showing a misleading value.
+        'Published At': succeeded ? toExcelDate(j.finishedAt) : undefined,
+        'LinkedIn Link': succeeded ? publishedUrlFor(j) || '' : '',
+      };
+    });
+
+    const sheet = XLSX.utils.json_to_sheet(rows, { cellDates: true });
+    sheet['!cols'] = [
+      { wch: 34 }, // Job ID
+      { wch: 10 }, // Status
+      { wch: 18 }, // Published For
+      { wch: 22 }, // Published On
+      { wch: 16 }, // Page ID
+      { wch: 44 }, // Page URL
+      { wch: 54 }, // Article Title
+      { wch: 70 }, // Article Preview
+      { wch: 20 }, // Published At
+      { wch: 46 }, // LinkedIn Link
+    ];
+
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, 'Publish Jobs');
+
+    const span = exportFrom || exportTo ? `${exportFrom || 'start'}_to_${exportTo || 'now'}` : 'all';
+    XLSX.writeFile(book, `publish-jobs_${span}.xlsx`);
+
+    setExportOpen(false);
+    setSuccess(`Exported ${rows.length} job${rows.length === 1 ? '' : 's'} to Excel`);
+  }
 
   const companyPageOptions = useMemo(() => {
     const pages = selectedAccount?.companyPages || [];
@@ -749,6 +888,9 @@ export function JobsPage() {
             </Button>
             <Button variant="ghost" onClick={openBulk}>
               Bulk schedule (JSON)
+            </Button>
+            <Button variant="ghost" onClick={() => setExportOpen(true)}>
+              Export Excel
             </Button>
             <Button variant="ghost" onClick={() => void refreshAll()} disabled={loading}>
               {loading ? 'Refreshing…' : 'Refresh'}
@@ -1212,6 +1354,91 @@ export function JobsPage() {
         <Note text={republishConfirmMessage} />
         <div className="muted" style={{ marginTop: 8 }}>
           {republishConfirmDetail}
+        </div>
+      </Modal>
+
+      <Modal
+        open={exportOpen}
+        title="Export publish jobs to Excel"
+        onClose={() => setExportOpen(false)}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setExportOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={downloadExcel} disabled={exportJobs.length === 0}>
+              Download ({exportJobs.length})
+            </Button>
+          </>
+        }
+      >
+        <div className="form">
+          <div className="row exportPresets">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setExportFrom(daysAgoDateInput(1));
+                setExportTo(daysAgoDateInput(0));
+              }}
+            >
+              Last day
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setExportFrom(daysAgoDateInput(7));
+                setExportTo(daysAgoDateInput(0));
+              }}
+            >
+              Last 7 days
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setExportFrom(daysAgoDateInput(30));
+                setExportTo(daysAgoDateInput(0));
+              }}
+            >
+              Last 30 days
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setExportFrom('');
+                setExportTo('');
+              }}
+            >
+              All time
+            </Button>
+          </div>
+
+          <div className="form twoCols">
+            <Field label="Scheduled from (Run At)" hint="Leave empty for no lower bound">
+              <input type="date" value={exportFrom} onChange={e => setExportFrom(e.target.value)} />
+            </Field>
+            <Field label="Scheduled to (Run At)" hint="Leave empty for no upper bound">
+              <input type="date" value={exportTo} onChange={e => setExportTo(e.target.value)} />
+            </Field>
+          </div>
+
+          <Field label="Rows to include">
+            <select
+              className="selectFancy"
+              value={exportScope}
+              onChange={e => setExportScope(e.target.value as 'range' | 'view')}
+            >
+              <option value="range">All jobs in this date range</option>
+              <option value="view">Only what the current filters show</option>
+            </select>
+          </Field>
+
+          <Note
+            text={
+              filterAccountId
+                ? `${exportJobs.length} job(s) will be exported. The account filter is active, so only jobs for that account are loaded.`
+                : `${exportJobs.length} job(s) will be exported.`
+            }
+          />
         </div>
       </Modal>
 

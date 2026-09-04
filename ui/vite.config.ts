@@ -12,6 +12,8 @@ export default defineConfig(({ mode }) => ({
       '/publish-jobs': 'http://localhost:3000',
       '/config': 'http://localhost:3000',
       '/auto-schedule': 'http://localhost:3000',
+      '/ui-auth': 'http://localhost:3000',
+      '/cleanup': 'http://localhost:3000',
     },
   },
   build: {

@@ -13,6 +13,16 @@ import type { ArticleDoc } from './db/models/ArticleModel';
 import { StaticConfigLoader } from './config/static-loader';
 import { autoScheduleArticles } from './services/autoScheduler';
 import { startArticleCleanup } from './services/articleCleanup';
+import {
+  bearerFrom,
+  clearFailedLogins,
+  isUiAuthEnabled,
+  issueToken,
+  loginBlockedFor,
+  recordFailedLogin,
+  verifyPassword,
+  verifyToken,
+} from './services/uiAuth';
 import path from 'path';
 import fs from 'fs';
 
@@ -112,6 +122,55 @@ async function main() {
   app.get('/health', (req: Request, res: Response) => {
     void req;
     return res.json({ ok: true });
+  });
+
+  // ---- UI password gate -----------------------------------------------------
+  // Guards the browser app only. The data API below stays open so the worker,
+  // Postman and bulk-upload scripts are unaffected.
+
+  app.get('/ui-auth/config', (req: Request, res: Response) => {
+    void req;
+    return res.json({ required: isUiAuthEnabled() });
+  });
+
+  app.post('/ui-auth/login', (req: Request, res: Response) => {
+    if (!isUiAuthEnabled()) {
+      return res.status(400).json({ error: 'UI password is not configured on the server' });
+    }
+
+    const throttleKey = req.ip || 'unknown';
+    const blockedFor = loginBlockedFor(throttleKey);
+    if (blockedFor > 0) {
+      logger.warn('UI auth → login throttled', { ip: throttleKey, retryAfterSeconds: blockedFor });
+      res.setHeader('Retry-After', String(blockedFor));
+      return res
+        .status(429)
+        .json({ error: `Too many attempts. Try again in ${Math.ceil(blockedFor / 60)} min.` });
+    }
+
+    const password = (req.body as Record<string, unknown> | undefined)?.password;
+    if (!verifyPassword(password)) {
+      recordFailedLogin(throttleKey);
+      logger.warn('UI auth → failed login attempt', { ip: throttleKey });
+      return res.status(401).json({ error: 'Incorrect password' });
+    }
+
+    clearFailedLogins(throttleKey);
+    const session = issueToken();
+    logger.info('UI auth → login succeeded', { expiresAt: session.expiresAt });
+    return res.json(session);
+  });
+
+  app.get('/ui-auth/session', (req: Request, res: Response) => {
+    if (!isUiAuthEnabled()) {
+      return res.json({ valid: true, required: false });
+    }
+
+    const check = verifyToken(bearerFrom(req.headers.authorization));
+    if (!check.valid) {
+      return res.status(401).json({ error: 'Session is not valid', reason: check.reason });
+    }
+    return res.json({ valid: true, required: true, expiresAt: check.expiresAt });
   });
 
   app.get('/config/profiles', (req: Request, res: Response) => {
@@ -1424,7 +1483,8 @@ async function main() {
           req.path.startsWith('/publish-jobs') ||
           req.path.startsWith('/config') ||
           req.path.startsWith('/auto-schedule') ||
-          req.path.startsWith('/cleanup')) {
+          req.path.startsWith('/cleanup') ||
+          req.path.startsWith('/ui-auth')) {
         return res.status(404).json({ error: 'Not found' });
       }
       res.sendFile(path.join(uiBuildPath, 'index.html'));

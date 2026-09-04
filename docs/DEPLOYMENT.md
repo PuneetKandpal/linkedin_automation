@@ -5,6 +5,7 @@ This guide explains how to deploy the LinkedIn Article Publisher for free on var
 ## Overview
 
 The application consists of:
+
 - **Backend**: Express.js API server with MongoDB
 - **Frontend**: React + Vite SPA (served as static files from the backend)
 - **Automation**: Playwright-based LinkedIn publishing (runs locally, not on server)
@@ -41,28 +42,33 @@ LOG_RETENTION_DAYS=7
 **Cons**: Free tier sleeps after inactivity (cold starts)
 
 1. **Install Railway CLI**:
+
    ```bash
    npm install -g @railway/cli
    ```
 
 2. **Login and create project**:
+
    ```bash
    railway login
    railway init
    ```
 
 3. **Add MongoDB database**:
+
    ```bash
    railway add --database mongodb
    ```
 
 4. **Set environment variables**:
+
    ```bash
    railway variables set STORAGE_STATE_SECRET="your_secret_here"
    railway variables set CORS_ORIGIN="*"
    ```
 
 5. **Deploy**:
+
    ```bash
    railway up
    ```
@@ -100,21 +106,25 @@ LOG_RETENTION_DAYS=7
 **Cons**: Requires credit card (no charges on free tier)
 
 1. **Install Fly CLI**:
+
    ```bash
    curl -L https://fly.io/install.sh | sh
    ```
 
 2. **Login**:
+
    ```bash
    fly auth login
    ```
 
 3. **Launch app** (first time only):
+
    ```bash
    fly launch --config fly.toml
    ```
 
 4. **Set secrets**:
+
    ```bash
    fly secrets set MONGODB_URI="your_mongodb_uri"
    fly secrets set STORAGE_STATE_SECRET="your_secret"
@@ -130,21 +140,24 @@ LOG_RETENTION_DAYS=7
 Deploy on any VPS (DigitalOcean, Hetzner, AWS EC2, etc.)
 
 1. **Build locally**:
+
    ```bash
    npm run build:all
    ```
 
 2. **Upload to server**:
+
    ```bash
    rsync -avz --exclude=node_modules --exclude=.git . user@your-server:/app/
    ```
 
 3. **On server**:
+
    ```bash
    cd /app
    npm ci --production
    npm run build:all
-   
+
    # Using PM2
    npm install -g pm2
    pm2 start dist/server.js --name linkedin-publisher
@@ -157,7 +170,7 @@ Deploy on any VPS (DigitalOcean, Hetzner, AWS EC2, etc.)
    server {
        listen 80;
        server_name your-domain.com;
-       
+
        location / {
            proxy_pass http://localhost:3000;
            proxy_http_version 1.1;
@@ -194,19 +207,23 @@ npm run dev
 ## Troubleshooting
 
 ### Build fails on "npm ci"
+
 - Clear npm cache: `npm cache clean --force`
 - Delete node_modules and lock file, reinstall
 
 ### MongoDB connection errors
+
 - Check IP whitelist in MongoDB Atlas
 - Verify connection string format
 - Ensure database user credentials are correct
 
 ### CORS errors in browser
+
 - Set `CORS_ORIGIN=*` or specific domain
 - For production, set it to your frontend URL
 
 ### Playwright not working on server
+
 - Playwright automation requires local environment with browser
 - The server only hosts the API and UI, not the automation
 - Run `bootstrap` and `worker` locally on your machine

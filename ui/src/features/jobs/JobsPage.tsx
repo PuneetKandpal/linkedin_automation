@@ -4,7 +4,7 @@ import { AccountsApi } from '../../api/accounts';
 import { ArticlesApi } from '../../api/articles';
 import { JobsApi } from '../../api/jobs';
 import { ConfigApi } from '../../api/config';
-import type { Account, Article, PublishJob } from '../../api/types';
+import type { Account, Article, PublishJob, PublishJobStatus } from '../../api/types';
 import { Card, Field, InlineError, Button, Badge, Modal, InlineSuccess, Note, Drawer, Loader } from '../../components/ui';
 import { generateJobId } from '../../utils/id';
 import { TabContext } from '../../context/TabContext';
@@ -42,6 +42,66 @@ type SearchOption = {
   note?: string;
   disabled?: boolean;
 };
+
+const JOB_STATUSES: PublishJobStatus[] = ['pending', 'running', 'success', 'failed', 'canceled'];
+
+function statusTone(status: PublishJobStatus): 'ok' | 'warn' | 'danger' | 'neutral' {
+  if (status === 'success') return 'ok';
+  if (status === 'failed') return 'danger';
+  if (status === 'running') return 'warn';
+  return 'neutral';
+}
+
+/** "in 3 h" / "5 min ago" — a quick sense of when a job runs without doing date math in your head. */
+function formatRelative(iso: string): string {
+  const target = new Date(iso).getTime();
+  if (Number.isNaN(target)) return '';
+  const diffMs = target - Date.now();
+  const future = diffMs >= 0;
+  const minutes = Math.round(Math.abs(diffMs) / 60_000);
+  let value: string;
+  if (minutes < 1) value = 'less than a minute';
+  else if (minutes < 60) value = `${minutes} min`;
+  else if (minutes < 60 * 24) {
+    const h = Math.round(minutes / 60);
+    value = `${h} h`;
+  } else {
+    const d = Math.round(minutes / (60 * 24));
+    value = `${d} day${d === 1 ? '' : 's'}`;
+  }
+  if (minutes < 1) return future ? 'in less than a minute' : 'just now';
+  return future ? `in ${value}` : `${value} ago`;
+}
+
+function CopyButton(props: { value: string; label?: string; title?: string }) {
+  const { value, label = 'Copy', title } = props;
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  return (
+    <button
+      type="button"
+      className="copyButton"
+      title={title || `Copy ${value}`}
+      onClick={async e => {
+        e.stopPropagation();
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+        } catch {
+          // clipboard unavailable (insecure origin) — silently ignore
+        }
+      }}
+    >
+      {copied ? 'Copied' : label}
+    </button>
+  );
+}
 
 function defaultLocalDateTime(minutesFromNow: number): string {
   const d = new Date(Date.now() + minutesFromNow * 60 * 1000);
@@ -171,16 +231,90 @@ export function JobsPage() {
   const [failureOpen, setFailureOpen] = useState(false);
   const [failureJobId, setFailureJobId] = useState<string>('');
   const failureJob = useMemo(() => jobs.find(j => j.jobId === failureJobId) || null, [jobs, failureJobId]);
-  const sortedJobs = useMemo(() => {
-    return [...jobs].sort((a, b) => new Date(b.runAt).getTime() - new Date(a.runAt).getTime());
+
+  const accountsMap = useMemo(() => {
+    const map = new Map<string, Account>();
+    accounts.forEach(a => map.set(a.accountId, a));
+    return map;
+  }, [accounts]);
+
+  const articlesMap = useMemo(() => {
+    const map = new Map<string, Article>();
+    articles.forEach(a => map.set(a.articleId, a));
+    return map;
+  }, [articles]);
+
+  const [statusFilter, setStatusFilter] = useState<'all' | PublishJobStatus>('all');
+  const [search, setSearch] = useState('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: jobs.length };
+    JOB_STATUSES.forEach(st => (counts[st] = 0));
+    jobs.forEach(j => {
+      counts[j.status] = (counts[j.status] || 0) + 1;
+    });
+    return counts;
   }, [jobs]);
 
+  const filteredJobs = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return jobs.filter(j => {
+      if (statusFilter !== 'all' && j.status !== statusFilter) return false;
+      if (!q) return true;
+      const haystack = [
+        j.jobId,
+        j.articleId,
+        j.accountId,
+        j.companyPageName,
+        j.companyPageUrl,
+        articlesMap.get(j.articleId)?.title,
+        accountsMap.get(j.accountId)?.displayName,
+      ];
+      return haystack.some(v => v && v.toLowerCase().includes(q));
+    });
+  }, [jobs, statusFilter, search, articlesMap, accountsMap]);
+
+  const sortedJobs = useMemo(() => {
+    const dir = sortDir === 'desc' ? -1 : 1;
+    return [...filteredJobs].sort(
+      (a, b) => dir * (new Date(a.runAt).getTime() - new Date(b.runAt).getTime())
+    );
+  }, [filteredJobs, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedJobs.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+
+  const pagedJobs = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sortedJobs.slice(start, start + pageSize);
+  }, [sortedJobs, currentPage, pageSize]);
+
+  // Any change to what is being listed sends you back to the first page.
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, search, filterAccountId, pageSize, sortDir]);
+
   const allSelected = useMemo(() => {
-    if (sortedJobs.length === 0) return false;
-    return sortedJobs.every(j => selectedJobIds.has(j.jobId));
-  }, [sortedJobs, selectedJobIds]);
+    if (pagedJobs.length === 0) return false;
+    return pagedJobs.every(j => selectedJobIds.has(j.jobId));
+  }, [pagedJobs, selectedJobIds]);
+
+  const someSelected = useMemo(
+    () => pagedJobs.some(j => selectedJobIds.has(j.jobId)),
+    [pagedJobs, selectedJobIds]
+  );
 
   const selectedCount = selectedJobIds.size;
+
+  // Bulk actions resolve against every loaded job, so a selection stays intact
+  // when you change page or narrow the filters.
+  const selectedJobs = useMemo(
+    () => jobs.filter(j => selectedJobIds.has(j.jobId)),
+    [jobs, selectedJobIds]
+  );
 
   const [bulkStatus, setBulkStatus] = useState<string>('');
 
@@ -197,7 +331,7 @@ export function JobsPage() {
   );
 
   async function bulkSetStatusSelected() {
-    const ids = sortedJobs.filter(j => selectedJobIds.has(j.jobId)).map(j => j.jobId);
+    const ids = selectedJobs.map(j => j.jobId);
     if (ids.length === 0) return;
     if (!bulkStatus) {
       window.alert('Select a status first.');
@@ -232,8 +366,7 @@ export function JobsPage() {
   }
 
   async function bulkCancelSelected() {
-    const selected = sortedJobs.filter(j => selectedJobIds.has(j.jobId));
-    const pendingIds = selected.filter(j => j.status === 'pending').map(j => j.jobId);
+    const pendingIds = selectedJobs.filter(j => j.status === 'pending').map(j => j.jobId);
     if (pendingIds.length === 0) {
       window.alert('No pending jobs selected to cancel.');
       return;
@@ -257,7 +390,7 @@ export function JobsPage() {
   }
 
   async function bulkDeleteSelected() {
-    const ids = sortedJobs.filter(j => selectedJobIds.has(j.jobId)).map(j => j.jobId);
+    const ids = selectedJobs.map(j => j.jobId);
     if (ids.length === 0) return;
     const ok = window.confirm(`Delete ${ids.length} job${ids.length === 1 ? '' : 's'}?`);
     if (!ok) return;
@@ -408,17 +541,19 @@ export function JobsPage() {
     [accounts, accountId]
   );
 
-  const accountsMap = useMemo(() => {
-    const map = new Map<string, Account>();
-    accounts.forEach(a => map.set(a.accountId, a));
-    return map;
-  }, [accounts]);
-
-  const articlesMap = useMemo(() => {
-    const map = new Map<string, Article>();
-    articles.forEach(a => map.set(a.articleId, a));
-    return map;
-  }, [articles]);
+  const publishedUrlFor = useCallback(
+    (job: PublishJob): string | undefined => {
+      const fromJob = job.articleUrl?.trim();
+      if (fromJob) return fromJob;
+      // Older jobs predate articleUrl on the job doc; fall back to the article record,
+      // but only when this job is the one that actually published it.
+      const article = articlesMap.get(job.articleId);
+      const fromArticle = article?.publishedUrl?.trim();
+      if (fromArticle && job.status === 'success') return fromArticle;
+      return undefined;
+    },
+    [articlesMap]
+  );
 
   const companyPageOptions = useMemo(() => {
     const pages = selectedAccount?.companyPages || [];
@@ -609,42 +744,6 @@ export function JobsPage() {
         title="Publish Jobs"
         right={
           <div className="row">
-            <div style={{ minWidth: 260 }}>
-              <SearchSelect
-                value={filterAccountId}
-                options={filterAccountOptions}
-                placeholder="Filter by account…"
-                onChange={value => setFilterAccountId(value)}
-              />
-            </div>
-            {selectedCount > 0 ? (
-              <>
-                <select
-                  value={bulkStatus}
-                  onChange={e => setBulkStatus(e.target.value)}
-                  disabled={loading}
-                >
-                  {statusOptions.map(o => (
-                    <option key={o.value} value={o.value} disabled={!o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-                <Button variant="ghost" onClick={() => void bulkSetStatusSelected()} disabled={loading || !bulkStatus}>
-                  Apply status ({selectedCount})
-                </Button>
-              </>
-            ) : null}
-            {selectedCount > 0 ? (
-              <>
-                <Button variant="ghost" onClick={() => void bulkCancelSelected()} disabled={loading}>
-                  Cancel selected ({selectedCount})
-                </Button>
-                <Button variant="ghost" onClick={() => void bulkDeleteSelected()} disabled={loading}>
-                  Delete selected ({selectedCount})
-                </Button>
-              </>
-            ) : null}
             <Button variant="primary" onClick={openSchedule}>
               Schedule
             </Button>
@@ -652,7 +751,7 @@ export function JobsPage() {
               Bulk schedule (JSON)
             </Button>
             <Button variant="ghost" onClick={() => void refreshAll()} disabled={loading}>
-              Refresh
+              {loading ? 'Refreshing…' : 'Refresh'}
             </Button>
           </div>
         }
@@ -661,22 +760,105 @@ export function JobsPage() {
         {success ? <InlineSuccess message={success} onClose={() => setSuccess(null)} /> : null}
         {error ? <InlineError message={error} onClose={() => setError(null)} /> : null}
         {loading ? <Loader label="Refreshing…" /> : null}
+
+        <div className="jobsFilters">
+          <div className="statusChips" role="group" aria-label="Filter by status">
+            <button
+              type="button"
+              className={`statusChip${statusFilter === 'all' ? ' active' : ''}`}
+              onClick={() => setStatusFilter('all')}
+            >
+              All <span className="statusChipCount">{statusCounts.all}</span>
+            </button>
+            {JOB_STATUSES.map(st => (
+              <button
+                key={st}
+                type="button"
+                className={`statusChip tone-${statusTone(st)}${statusFilter === st ? ' active' : ''}`}
+                onClick={() => setStatusFilter(st)}
+              >
+                {st} <span className="statusChipCount">{statusCounts[st] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="jobsFilterInputs">
+            <input
+              className="jobsSearch"
+              type="search"
+              value={search}
+              placeholder="Search job, article, account or company page…"
+              onChange={e => setSearch(e.target.value)}
+            />
+            <div style={{ minWidth: 240 }}>
+              <SearchSelect
+                value={filterAccountId}
+                options={filterAccountOptions}
+                placeholder="Filter by account…"
+                onChange={value => setFilterAccountId(value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {selectedCount > 0 ? (
+          <div className="selectionBar">
+            <span className="strong">
+              {selectedCount} job{selectedCount === 1 ? '' : 's'} selected
+            </span>
+            <div className="row">
+              <select
+                className="selectFancy"
+                value={bulkStatus}
+                onChange={e => setBulkStatus(e.target.value)}
+                disabled={loading}
+              >
+                {statusOptions.map(o => (
+                  <option key={o.value} value={o.value} disabled={!o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="ghost"
+                onClick={() => void bulkSetStatusSelected()}
+                disabled={loading || !bulkStatus}
+              >
+                Apply status
+              </Button>
+              <Button variant="ghost" onClick={() => void bulkCancelSelected()} disabled={loading}>
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={() => void bulkDeleteSelected()} disabled={loading}>
+                Delete
+              </Button>
+              <Button variant="ghost" onClick={() => setSelectedJobIds(new Set())}>
+                Clear
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="tableWrap">
-          <table className="table">
+          <table className="table jobsTable">
             <thead>
               <tr>
                 <th style={{ width: 34 }}>
                   <input
                     type="checkbox"
+                    aria-label="Select all jobs on this page"
                     checked={allSelected}
+                    ref={el => {
+                      if (el) el.indeterminate = !allSelected && someSelected;
+                    }}
                     onChange={e => {
                       const checked = e.target.checked;
                       setSelectedJobIds(prev => {
                         const next = new Set(prev);
                         if (checked) {
-                          sortedJobs.forEach(j => next.add(j.jobId));
+                          pagedJobs.forEach(j => next.add(j.jobId));
                         } else {
-                          sortedJobs.forEach(j => next.delete(j.jobId));
+                          pagedJobs.forEach(j => next.delete(j.jobId));
                         }
                         return next;
                       });
@@ -687,18 +869,32 @@ export function JobsPage() {
                 <th>Account</th>
                 <th>Company page</th>
                 <th>Article</th>
-                <th>Run At</th>
+                <th>
+                  <button
+                    type="button"
+                    className="sortHeader"
+                    onClick={() => setSortDir(d => (d === 'desc' ? 'asc' : 'desc'))}
+                    title={sortDir === 'desc' ? 'Sorted newest first' : 'Sorted oldest first'}
+                  >
+                    Run At <span aria-hidden="true">{sortDir === 'desc' ? '↓' : '↑'}</span>
+                  </button>
+                </th>
                 <th>Status</th>
+                <th>Published post</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {sortedJobs.map(j => (
-                <tr key={j.jobId}>
+              {pagedJobs.map(j => {
+                const publishedUrl = publishedUrlFor(j);
+                const isSelected = selectedJobIds.has(j.jobId);
+                return (
+                <tr key={j.jobId} className={isSelected ? 'selected' : undefined}>
                   <td onClick={e => e.stopPropagation()}>
                     <input
                       type="checkbox"
-                      checked={selectedJobIds.has(j.jobId)}
+                      aria-label={`Select job ${j.jobId}`}
+                      checked={isSelected}
                       onChange={e => {
                         const checked = e.target.checked;
                         setSelectedJobIds(prev => {
@@ -712,7 +908,8 @@ export function JobsPage() {
                   </td>
                   <td>
                     <div className="cellStack jobCell">
-                      <span className="strong breakWord">{j.jobId}</span>
+                      <span className="mono breakWord">{j.jobId}</span>
+                      <CopyButton value={j.jobId} label="Copy ID" />
                     </div>
                   </td>
                   <td>
@@ -738,24 +935,36 @@ export function JobsPage() {
                       <div className="muted breakWord">{j.articleId}</div>
                     </div>
                   </td>
-                  <td>{new Date(j.runAt).toLocaleString()}</td>
                   <td>
-                    <Badge
-                      tone={
-                        j.status === 'success'
-                          ? 'ok'
-                          : j.status === 'failed'
-                            ? 'danger'
-                            : j.status === 'running'
-                              ? 'warn'
-                              : 'neutral'
-                      }
-                      text={j.status}
-                    />
+                    <div className="cellStack">
+                      <span>{new Date(j.runAt).toLocaleString()}</span>
+                      <span className="muted">{formatRelative(j.runAt)}</span>
+                    </div>
                   </td>
                   <td>
-                    <div className="row">
+                    <div className="statusCell">
+                      <Badge tone={statusTone(j.status)} text={j.status} />
+                      {j.status === 'failed' && (j.errorStep || j.errorCode) ? (
+                        <div className="statusMeta breakWord">{j.errorStep || j.errorCode}</div>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td>
+                    {publishedUrl ? (
+                      <div className="cellStack publishedCell">
+                        <a className="linkButton" href={publishedUrl} target="_blank" rel="noreferrer">
+                          Open on LinkedIn ↗
+                        </a>
+                        <CopyButton value={publishedUrl} label="Copy link" />
+                      </div>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="row rowActions">
                       <select
+                        className="selectFancy"
                         value=""
                         onChange={e => {
                           const next = e.target.value;
@@ -783,10 +992,78 @@ export function JobsPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
+              {pagedJobs.length === 0 ? (
+                <tr>
+                  <td colSpan={9}>
+                    <div className="emptyState">
+                      <div className="strong">No publish jobs match this view</div>
+                      <div className="muted">
+                        {jobs.length === 0
+                          ? 'Schedule a job to get started.'
+                          : 'Try clearing the search, status or account filter.'}
+                      </div>
+                      {jobs.length > 0 ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            setSearch('');
+                            setStatusFilter('all');
+                            setFilterAccountId('');
+                          }}
+                        >
+                          Clear filters
+                        </Button>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
+
+        {sortedJobs.length > 0 ? (
+          <div className="tableFooter">
+            <span className="muted">
+              Showing {(currentPage - 1) * pageSize + 1}–
+              {Math.min(currentPage * pageSize, sortedJobs.length)} of {sortedJobs.length} job
+              {sortedJobs.length === 1 ? '' : 's'}
+            </span>
+            <div className="row">
+              <select
+                className="selectFancy pageSizeSelect"
+                value={pageSize}
+                onChange={e => setPageSize(Number(e.target.value))}
+                aria-label="Rows per page"
+              >
+                {[25, 50, 100, 200].map(n => (
+                  <option key={n} value={n}>
+                    {n} / page
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="ghost"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+              >
+                Prev
+              </Button>
+              <span className="muted">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="ghost"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Card>
 
       <Drawer

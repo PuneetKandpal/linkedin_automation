@@ -9,6 +9,7 @@ import { AutoSchedulePage } from './features/autoSchedule/AutoSchedulePage';
 import { HealthApi } from './api/health';
 import type { Health } from './api/types';
 import { TabContext } from './context/TabContext';
+import { AuthGate } from './auth/AuthGate';
 
 const TAB_STORAGE_KEY = 'lp-active-tab';
 const TAB_QUERY_KEY = 'tab';
@@ -46,6 +47,10 @@ function getInitialTab(): TabKey {
 }
 
 export default function App() {
+  return <AuthGate renderLoggedIn={logout => <Workspace onLogout={logout} />} />;
+}
+
+function Workspace(props: { onLogout?: () => void }) {
   const [tab, setTab] = useState<TabKey>(() => getInitialTab());
   const [health, setHealth] = useState<Health | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
@@ -126,6 +131,7 @@ export default function App() {
         health={health}
         themeMode={themeMode}
         onThemeChange={handleThemeChange}
+        onLogout={props.onLogout}
       >
         {tab === 'accounts' ? <AccountsPage /> : null}
         {tab === 'articles' ? <ArticlesPage /> : null}

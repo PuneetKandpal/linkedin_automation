@@ -11,6 +11,8 @@ export function Layout(
     health?: { ok: boolean } | null;
     themeMode: ThemeMode;
     onThemeChange: (mode: ThemeMode) => void;
+    /** Omitted when the UI password gate is disabled on the server. */
+    onLogout?: () => void;
   }>
 ) {
   return (
@@ -39,6 +41,11 @@ export function Layout(
             ) : (
               <Badge tone="neutral" text="Health: …" />
             )}
+            {props.onLogout ? (
+              <button type="button" className="themePill" onClick={props.onLogout}>
+                Sign out
+              </button>
+            ) : null}
           </div>
         </div>
         <nav className="tabs">

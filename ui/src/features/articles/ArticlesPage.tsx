@@ -357,11 +357,6 @@ export function ArticlesPage() {
                       >
                         Mark Ready
                       </Button>
-                      {a.publishedUrl ? (
-                        <a href={a.publishedUrl} target="_blank" rel="noreferrer">
-                          Open
-                        </a>
-                      ) : null}
                     </div>
                   </td>
                 </tr>

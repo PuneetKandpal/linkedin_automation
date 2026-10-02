@@ -1,0 +1,9 @@
+{
+  "default": {
+    "preLaunch": [3000, 8000],
+    "beforeEditorFocus": [1000, 3000],
+    "betweenParagraphs": [800, 2500],
+    "beforePublish": [3000, 7000],
+    "afterPublish": [6000, 12000]
+  }
+}

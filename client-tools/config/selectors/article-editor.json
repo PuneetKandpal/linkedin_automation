@@ -1,0 +1,6 @@
+{
+  "titleInput": "role=textbox[name='Title']",
+  "editor": "role=textbox[name='Article editor content']",
+  "editorContainer": ".ql-editor",
+  "coverUploadButton": "role=button[name='Upload from computer']"
+}

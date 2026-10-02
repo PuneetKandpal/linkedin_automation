@@ -1,0 +1,19 @@
+{
+  "browser": {
+    "headless": true,
+    "slowMo": 0,
+    "defaultTimeout": 30000,
+    "initialPageLoadTimeoutMs": 120000,
+    "engine": "chrome",
+    "chromeWindow": "background"
+  },
+  "execution": {
+    "maxArticlesPerRun": 1,
+    "closeBrowserOnFailure": true
+  },
+  "captcha": {
+    "provider": "capsolver",
+    "timeoutMs": 120000,
+    "maxAttempts": 1
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "name": "linkedin-article-publisher",
+  "version": "1.0.0",
+  "description": "Config-driven LinkedIn Article Publisher using Playwright with Page Object Model",
+  "main": "dist/index.js",
+  "type": "commonjs",
+  "bin": {
+    "li-connect": "cli/li-connect.js",
+    "li-worker": "cli/li-worker.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:ui": "cd ui && npm run build",
+    "build:all": "npm run build && npm run build:ui",
+    "build:cli": "npm run build:cli:connect && npm run build:cli:worker",
+    "build:cli:connect": "npm run build && pkg cli/li-connect.js --targets node18-macos-arm64 --output cli-dist/li-connect",
+    "build:cli:worker": "npm run build && pkg cli/li-worker.js --targets node18-macos-arm64 --output cli-dist/li-worker",
+    "build:cli:mac": "npm run build && pkg cli/li-connect.js cli/li-worker.js --targets node18-macos-arm64,node18-macos-x64 --out-path cli-dist",
+    "build:cli:win": "npm run build && pkg cli/li-connect.js cli/li-worker.js --targets node18-win-x64 --out-path cli-dist",
+    "build:cli:linux": "npm run build && pkg cli/li-connect.js cli/li-worker.js --targets node18-linux-x64 --out-path cli-dist",
+    "start": "node dist/index.js",
+    "start:server": "node dist/server.js",
+    "dev": "ts-node src/index.ts",
+    "dev:server": "ts-node src/server.ts",
+    "dev:worker": "ts-node src/worker.ts",
+    "bootstrap": "ts-node src/bootstrap.ts",
+    "codegen": "npx playwright codegen --browser=chromium --user-data-dir=./profiles/acct_01 https://www.linkedin.com",
+    "trace:show": "npx playwright show-trace ./output/traces/latest.zip",
+    "clean": "rm -rf dist cli-dist"
+  },
+  "pkg": {
+    "scripts": [
+      "dist/**/*.js"
+    ],
+    "assets": [
+      "node_modules/@playwright/**/*",
+      "node_modules/playwright/**/*"
+    ],
+    "targets": [
+      "node18-win-x64",
+      "node18-macos-x64",
+      "node18-macos-arm64",
+      "node18-linux-x64"
+    ],
+    "outputPath": "cli-dist"
+  },
+  "keywords": [
+    "linkedin",
+    "automation",
+    "playwright",
+    "article-publisher"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@playwright/test": "^1.58.0",
+    "cors": "2.8.6",
+    "dotenv": "17.2.3",
+    "express": "^4.21.2",
+    "marked": "^12.0.2",
+    "mongoose": "^8.10.0",
+    "sanitize-html": "^2.12.1",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/cors": "2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/node": "^25.0.10",
+    "@types/sanitize-html": "^2.11.0",
+    "pkg": "^5.8.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

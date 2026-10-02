@@ -1,6 +1,7 @@
 import './env';
-import { mkdirSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
+import type { Page } from '@playwright/test';
 import { connectMongo } from './db/mongo';
 import { decryptJson } from './db/crypto';
 import { AccountModel } from './db/models/AccountModel';
@@ -18,6 +19,28 @@ import { PublishConfirmPage } from './pages/PublishConfirmPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ErrorCode, PublisherError } from './errors/error.types';
 import { markdownToLinkedInHtml } from './markdown/linkedin';
+
+// The browser of the job in progress, so Ctrl+C can close it. On macOS the worker's Chrome is
+// started through `open` and is not a child process, so it would otherwise outlive the worker
+// and lock the account's profile for the next run.
+let activeContextFactory: BrowserContextFactory | null = null;
+
+function setupShutdownHandlers() {
+  let shuttingDown = false;
+  const shutdown = (signal: string) => {
+    if (shuttingDown) process.exit(1);
+    shuttingDown = true;
+    // eslint-disable-next-line no-console
+    console.log(`Worker → ${signal} received, closing browser...`);
+    const closing = activeContextFactory ? activeContextFactory.closeContext() : Promise.resolve();
+    void Promise.race([closing.catch(() => undefined), sleep(5000)]).finally(() => process.exit(130));
+  };
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  // Terminal window closed (macOS and Windows), and Ctrl+Break (Windows).
+  process.on('SIGHUP', () => shutdown('SIGHUP'));
+  process.on('SIGBREAK', () => shutdown('SIGBREAK'));
+}
 
 function setupGlobalErrorHandlers() {
   process.on('unhandledRejection', err => {
@@ -111,6 +134,7 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
   }
 
   let contextFactory: BrowserContextFactory | null = null;
+  let activePage: Page | null = null;
 
   try {
     if (account.status !== 'active') {
@@ -130,6 +154,7 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
 
     const delayEngine = new DelayEngine(delayProfile, logger);
     contextFactory = new BrowserContextFactory(cfg.global, logger);
+    activeContextFactory = contextFactory;
 
     await ArticleModel.updateOne(
       { articleId: article.articleId },
@@ -147,6 +172,7 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
     });
 
     const page = context.pages()[0] || (await context.newPage());
+    activePage = page;
 
     const humanEngine = new HumanEngine(page, typingProfile, logger);
 
@@ -260,7 +286,32 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
     }
   } catch (err) {
     const msg = String(err);
-    logger.error('Worker job failed', { jobId, error: msg });
+    logger.error('Worker job failed', { jobId, error: msg, pageUrl: activePage?.url() });
+
+    if (activePage) {
+      try {
+        const shotDir = resolve('./output/screenshots');
+        mkdirSync(shotDir, { recursive: true });
+        const shotPath = resolve(shotDir, `${jobId}_${runTs}.png`);
+        try {
+          await activePage.screenshot({ path: shotPath, fullPage: true, timeout: 15000 });
+        } catch {
+          // Full-page captures of long articles can time out in a minimized window; the visible area still helps.
+          await activePage.screenshot({ path: shotPath, timeout: 10000 });
+        }
+        logger.info('Worker → failure screenshot saved', { path: shotPath });
+      } catch (shotErr) {
+        logger.warn('Worker → failure screenshot failed', { error: String(shotErr) });
+        // A minimized Chrome window may not produce screenshots at all; the page HTML always works.
+        try {
+          const htmlPath = resolve('./output/screenshots', `${jobId}_${runTs}.html`);
+          writeFileSync(htmlPath, await activePage.content());
+          logger.info('Worker → failure page HTML saved instead', { path: htmlPath });
+        } catch (htmlErr) {
+          logger.warn('Worker → failure page HTML failed', { error: String(htmlErr) });
+        }
+      }
+    }
 
     let code: string = ErrorCode.UNKNOWN;
     let metadata: Record<string, unknown> | undefined;
@@ -309,6 +360,7 @@ async function runOne(jobId: string, configDir: string): Promise<void> {
     if (contextFactory) {
       await contextFactory.closeContext();
     }
+    activeContextFactory = null;
   }
 }
 
@@ -358,6 +410,7 @@ async function main() {
 }
 
 setupGlobalErrorHandlers();
+setupShutdownHandlers();
 
 function start() {
   void main().catch(err => {

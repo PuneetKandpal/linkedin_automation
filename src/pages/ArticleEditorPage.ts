@@ -9,7 +9,7 @@ import { Logger } from '../engine/logger';
 import { HumanEngine } from '../engine/human.engine';
 import { DelayEngine } from '../engine/delay.engine';
 import { Selectors, ArticleContentBlock } from '../config/types';
-import { EditorError } from '../errors/error.types';
+import { EditorError, LoginRedirectError } from '../errors/error.types';
 
 export class ArticleEditorPage extends BasePage {
   private readonly ARTICLE_EDITOR_URL = 'https://www.linkedin.com/article/new';
@@ -35,6 +35,29 @@ export class ArticleEditorPage extends BasePage {
     const { companyPageUrl, companyPageName } = params;
     this.logger.info('Opening company page article editor', { companyPageUrl, companyPageName });
 
+    // Preferred: open the page's article editor directly (the same URL the Create menu links to).
+    // The admin "Create" dialog intermittently shows "Create is not available".
+    const companyId = companyPageUrl?.match(/\/company\/(\d+)/)?.[1];
+    if (companyId) {
+      const editorUrl = `https://www.linkedin.com/article/new/?author=${encodeURIComponent(`urn:li:fsd_company:${companyId}`)}`;
+      await this.navigateTo(editorUrl);
+      await this.delayEngine.wait(1500);
+
+      const landedUrl = this.page.url();
+      if (/\/(login|uas\/login|authwall)/.test(landedUrl)) {
+        throw new LoginRedirectError('LinkedIn redirected the article editor to sign-in - reconnect the account', {
+          url: landedUrl,
+          step: 'open_company_editor',
+        });
+      }
+
+      await this.delayEngine.beforeEditorFocus();
+      await this.waitForEditorReady();
+      await this.assertCompanyAuthor(companyPageName);
+      this.logger.info('Company page article editor opened', { url: this.page.url() });
+      return;
+    }
+
     if (companyPageUrl && companyPageUrl.trim().length > 0) {
       await this.navigateTo(companyPageUrl.trim());
     } else if (companyPageName && companyPageName.trim().length > 0) {
@@ -48,13 +71,93 @@ export class ArticleEditorPage extends BasePage {
 
     await this.delayEngine.wait(1500);
 
+    const landedUrl = this.page.url();
+    if (/\/(login|uas\/login|authwall)/.test(landedUrl)) {
+      throw new LoginRedirectError('LinkedIn redirected the company page to sign-in - reconnect the account', {
+        url: landedUrl,
+        step: 'open_company_page',
+      });
+    }
+
     // Codegen path: Page -> Create -> Publish an article
     await this.page.getByRole('link', { name: /create/i }).first().click();
     await this.delayEngine.wait(800);
-    await this.page.getByRole('link', { name: /publish an article/i }).first().click();
+
+    // LinkedIn renders this option as a link on most pages; accept menu items/buttons and the
+    // "Write an article" wording too.
+    const articleOptionName = /(publish|write) an article|write article/i;
+    const articleOption = this.page
+      .getByRole('link', { name: articleOptionName })
+      .or(this.page.getByRole('menuitem', { name: articleOptionName }))
+      .or(this.page.getByRole('button', { name: articleOptionName }))
+      .first();
+
+    try {
+      await articleOption.waitFor({ state: 'visible', timeout: 20000 });
+    } catch {
+      const options = await this.visibleCreateMenuOptions();
+      this.logger.error('Create menu has no article option', { url: this.page.url(), options });
+      throw new EditorError(
+        `Company page Create menu has no "Publish an article" option. Check the account is a Super or Content admin of this page. Options shown: ${options.join(' | ') || '(none found)'}`,
+        { url: this.page.url(), step: 'open_company_article_menu', options }
+      );
+    }
+    await articleOption.click();
 
     await this.delayEngine.beforeEditorFocus();
     await this.waitForEditorReady();
+    this.logger.info('Company page article editor opened', { url: this.page.url() });
+  }
+
+  /**
+   * The editor shows the author as a button ("LifeTrack Health Individual article"). If the
+   * account cannot post for the page, LinkedIn may fall back to the personal profile, so never
+   * continue unless the company is the author.
+   */
+  private async assertCompanyAuthor(companyPageName?: string): Promise<void> {
+    const name = companyPageName?.trim();
+    if (!name) {
+      this.logger.warn('Company page name unknown, cannot verify the article author');
+      return;
+    }
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    const authorButton = this.page.getByRole('button', { name: new RegExp(escaped, 'i') }).first();
+    try {
+      await authorButton.waitFor({ state: 'visible', timeout: 15000 });
+    } catch {
+      throw new EditorError(
+        `Article editor is not posting as "${name}". Check the account is a Super or Content admin of this page.`,
+        { url: this.page.url(), step: 'verify_company_author' }
+      );
+    }
+    this.logger.info('Article author verified', { author: name });
+  }
+
+  /** Text of the clickable items in the open Create menu/dialog, for diagnosing a missing option. */
+  private async visibleCreateMenuOptions(): Promise<string[]> {
+    try {
+      return await this.page.evaluate(() => {
+        const doc = (globalThis as any).document as any;
+        const isVisible = (el: any) => {
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        };
+        const clickable = 'a, button, [role="menuitem"], [role="option"]';
+        const containers = Array.from(doc.querySelectorAll('[role="dialog"], [role="menu"], [role="listbox"]')).filter(isVisible);
+        const items: any[] = containers.length
+          ? containers.flatMap((c: any) => Array.from(c.querySelectorAll(clickable)))
+          : Array.from(doc.querySelectorAll(clickable)).filter((el: any) =>
+              /article|post|event|create|publish|write/i.test(el.innerText || '')
+            );
+        const texts = items
+          .filter(isVisible)
+          .map((el: any) => String(el.innerText || el.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim())
+          .filter((t: string) => t.length > 0 && t.length < 80);
+        return Array.from(new Set(texts)).slice(0, 25) as string[];
+      });
+    } catch {
+      return [];
+    }
   }
 
   async maybeUploadCoverImage(coverImagePath?: string): Promise<boolean> {

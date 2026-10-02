@@ -4,7 +4,7 @@ import { Logger } from '../engine/logger';
 import { HumanEngine } from '../engine/human.engine';
 import { DelayEngine } from '../engine/delay.engine';
 import { Selectors } from '../config/types';
-import { CaptchaError, LoginRedirectError, OtpRequiredError } from '../errors/error.types';
+import { CaptchaError, LoginRedirectError, OtpRequiredError, SessionError } from '../errors/error.types';
 
 export class SessionPage extends BasePage {
   constructor(
@@ -38,11 +38,55 @@ export class SessionPage extends BasePage {
       throw new OtpRequiredError('OTP verification required', { url: currentUrl });
     }
 
-    this.logger.info('Session validation passed');
+    // An expired session does not always redirect to /login: linkedin.com just renders the
+    // signed-out guest homepage. Check the auth cookie and what the page actually shows.
+    if (!(await this.hasAuthCookie())) {
+      this.logger.error('LinkedIn auth cookie (li_at) missing - session expired');
+      throw new SessionError('LinkedIn session expired (li_at cookie missing) - reconnect the account', {
+        url: currentUrl,
+        step: 'session_check',
+      });
+    }
+
+    const pageState = await this.detectPageState();
+    if (pageState === 'signed_out') {
+      this.logger.error('LinkedIn is showing the signed-out page - session expired', { url: this.page.url() });
+      throw new SessionError('LinkedIn session expired (signed-out page shown) - reconnect the account', {
+        url: this.page.url(),
+        step: 'session_check',
+      });
+    }
+    if (pageState === 'unknown') {
+      this.logger.warn('Could not confirm signed-in navigation bar, continuing', { url: this.page.url() });
+    }
+
+    this.logger.info('Session validation passed', { url: this.page.url() });
   }
 
   private isLoginPage(url: string): boolean {
-    return url.includes('/login') || url.includes('/uas/login');
+    return url.includes('/login') || url.includes('/uas/login') || url.includes('/authwall');
+  }
+
+  private async hasAuthCookie(): Promise<boolean> {
+    const cookies = await this.page.context().cookies('https://www.linkedin.com');
+    return cookies.some(c => c.name === 'li_at' && c.value.length > 0);
+  }
+
+  private async detectPageState(): Promise<'signed_in' | 'signed_out' | 'unknown'> {
+    // Signed-out visitors are never served the feed.
+    if (new URL(this.page.url()).pathname.startsWith('/feed')) return 'signed_in';
+
+    const signedIn = this.page.locator('#global-nav, header.global-nav, nav.global-nav').first();
+    const signedOut = this.page.getByRole('link', { name: /^(sign in|join now)$/i }).first();
+
+    try {
+      return await Promise.race([
+        signedIn.waitFor({ state: 'visible', timeout: 15000 }).then(() => 'signed_in' as const),
+        signedOut.waitFor({ state: 'visible', timeout: 15000 }).then(() => 'signed_out' as const),
+      ]);
+    } catch {
+      return 'unknown';
+    }
   }
 
   private async isCaptchaPresent(): Promise<boolean> {

@@ -1,4 +1,6 @@
+import { resolve } from 'path';
 import { chromium, Browser, BrowserContext } from 'playwright';
+import { hasLinkedInAuthCookie, openRealChrome, RealChromeSession } from './real-chrome';
 import { Account, GlobalConfig } from '../config/types';
 import { Logger } from '../engine/logger';
 
@@ -10,6 +12,7 @@ function isProxyConnectionFailure(err: unknown): boolean {
 export class BrowserContextFactory {
   private context: BrowserContext | null = null;
   private browser: Browser | null = null;
+  private realChrome: RealChromeSession | null = null;
 
   constructor(
     private globalConfig: GlobalConfig,
@@ -30,6 +33,12 @@ export class BrowserContextFactory {
     }
 
     const forceNoProxy = process.env.NO_PROXY === '1' || process.env.NO_PROXY === 'true';
+
+    const engine = process.env.BROWSER_ENGINE || this.globalConfig.browser.engine || 'playwright';
+    if (engine === 'chrome') {
+      this.context = await this.createRealChromeContext(account, forceNoProxy);
+      return this.context;
+    }
 
     const launch = async (useProxy: boolean): Promise<BrowserContext> => {
       const launchOptions: any = {
@@ -115,7 +124,69 @@ export class BrowserContextFactory {
     return this.context;
   }
 
+  /**
+   * LinkedIn rejects a session whose cookies were created in real Chrome but replayed in
+   * Playwright's headless Chromium (feed loads, then the next page hits /authwall). Running in
+   * the same Chrome + profile that `npm run bootstrap` used keeps the browser identity identical.
+   */
+  private async createRealChromeContext(account: Account, forceNoProxy: boolean): Promise<BrowserContext> {
+    const userDataDir = resolve('./profiles', account.accountId);
+    const useProxy = Boolean(account.proxy) && !forceNoProxy;
+    this.logger.info('Launching installed Google Chrome', { accountId: account.accountId, userDataDir, useProxy });
+
+    const background = this.globalConfig.browser.chromeWindow !== 'visible';
+    this.realChrome = await openRealChrome({
+      userDataDir,
+      url: 'about:blank',
+      proxyServer: useProxy ? account.proxy?.server : undefined,
+      extraArgs: background ? undefined : ['--window-size=1920,1080'],
+      background,
+    });
+    const context = this.realChrome.context;
+
+    if (this.realChrome.closedLeftovers > 0) {
+      this.logger.warn('Closed a Chrome that was still running on this profile from an earlier run', {
+        count: this.realChrome.closedLeftovers,
+      });
+    }
+
+    if (this.realChrome.windowPlacement === 'visible') {
+      this.logger.warn(
+        'Chrome could not keep the window hidden on this machine, so it is shown normally. Set browser.chromeWindow to "visible" to silence this.',
+        { platform: process.platform }
+      );
+    } else if (this.realChrome.windowPlacement) {
+      this.logger.info('Chrome running in background', { windowPlacement: this.realChrome.windowPlacement });
+    }
+
+    if (await hasLinkedInAuthCookie(context)) {
+      this.logger.info('Using LinkedIn session already in the Chrome profile');
+    } else {
+      const cookies = ((account.storageState as any)?.cookies || []) as any[];
+      this.logger.info('Chrome profile not signed in, loading saved session cookies', { cookies: cookies.length });
+      await context.addCookies(cookies);
+    }
+
+    const page = context.pages()[0] || (await context.newPage());
+    this.logger.info('Navigating to LinkedIn...', { url: 'https://www.linkedin.com/' });
+    await page.goto('https://www.linkedin.com/', {
+      waitUntil: 'domcontentloaded',
+      timeout: this.globalConfig.browser.initialPageLoadTimeoutMs,
+    });
+    this.logger.info('LinkedIn page loaded successfully');
+    return context;
+  }
+
   async closeContext(): Promise<void> {
+    if (this.realChrome) {
+      // The default context of an attached Chrome can't be closed directly; quitting Chrome does it.
+      await this.realChrome.close();
+      this.logger.info('Chrome closed');
+      this.realChrome = null;
+      this.context = null;
+      return;
+    }
+
     if (this.context) {
       await this.context.close();
       this.logger.info('Browser context closed');

@@ -3,11 +3,11 @@ import { mkdirSync } from 'fs';
 import { resolve } from 'path';
 import { createInterface } from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
-import { chromium } from 'playwright';
 import { Logger } from '../engine/logger';
 import { connectMongo } from '../db/mongo';
 import { encryptJson } from '../db/crypto';
 import { AccountModel } from '../db/models/AccountModel';
+import { hasLinkedInAuthCookie, openRealChrome } from '../browser/real-chrome';
 import mongoose from 'mongoose';
 
 // CLI Banner
@@ -28,11 +28,6 @@ function getArgValue(flag: string): string | undefined {
 
 function hasFlag(flag: string): boolean {
   return process.argv.includes(flag);
-}
-
-function isProxyConnectionFailure(err: unknown): boolean {
-  const msg = String(err);
-  return msg.includes('ERR_PROXY_CONNECTION_FAILED') || msg.includes('net::ERR_PROXY_CONNECTION_FAILED');
 }
 
 async function promptValue(
@@ -201,112 +196,82 @@ async function main() {
     console.log('  ✅ Account saved');
     logger.info('Account Connector → starting browser', { accountId });
 
-    const launchAndGoto = async (useProxy: boolean) => {
-      console.log(`\n🌐 Opening browser (proxy: ${useProxy ? 'yes' : 'no'})...`);
-      
-      const browser = await chromium.launch({
-        headless: false,
-        proxy:
-          useProxy && account.proxy
-            ? {
-                server: account.proxy.server,
-                username: account.proxy.username,
-                password: account.proxy.password,
-              }
-            : undefined,
-      });
+    // The installed Google Chrome with a per-account profile. The worker reuses this exact
+    // profile, so LinkedIn sees the same browser for login and publishing. (Playwright's bundled
+    // Chromium is blocked by LinkedIn's Cloudflare check.)
+    const useProxy = Boolean(account.proxy) && !forceNoProxy;
+    const userDataDir = resolve('./profiles', accountId);
+    console.log(`\n🌐 Opening Google Chrome (proxy: ${useProxy ? 'yes' : 'no'})...`);
+    if (useProxy && account.proxy?.username) {
+      console.log('   Chrome will ask for the proxy username/password in the browser window.');
+    }
 
-      const context = await browser.newContext({
-        viewport: { width: 1920, height: 1080 },
-        locale: 'en-US',
-        timezoneId: account.timezone,
-      });
-
-      try {
-        const page = context.pages()[0] || (await context.newPage());
-        await page.goto('https://www.linkedin.com/', { waitUntil: 'domcontentloaded' });
-        return { browser, context, page };
-      } catch (err) {
-        try { await context.close(); } catch { }
-        try { await browser.close(); } catch { }
-        throw err;
-      }
-    };
-
-    let browser;
-    let context;
-    let page;
-    
-    try {
-      const useProxy = Boolean(account.proxy) && !forceNoProxy;
-      ({ browser, context, page } = await launchAndGoto(useProxy));
-    } catch (err) {
-      if (!forceNoProxy && Boolean(account.proxy) && isProxyConnectionFailure(err)) {
-        console.log('⚠️  Proxy connection failed, retrying without proxy...');
-        logger.warn('Account Connector → proxy failed, retrying without proxy', { error: String(err) });
-        ({ browser, context, page } = await launchAndGoto(false));
-      } else {
-        throw err;
-      }
+    const chrome = await openRealChrome({
+      userDataDir,
+      url: 'https://www.linkedin.com/login',
+      proxyServer: useProxy ? account.proxy?.server : undefined,
+    });
+    if (chrome.closedLeftovers > 0) {
+      logger.warn('Account Connector → closed a Chrome that was still running on this profile', { count: chrome.closedLeftovers });
     }
 
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
     console.log('║  📝 INSTRUCTIONS                                              ║');
     console.log('║                                                               ║');
-    console.log('║  1. A browser window has opened with LinkedIn                ║');
-    console.log('║  2. Please log in to your LinkedIn account                   ║');
+    console.log('║  1. A Google Chrome window has opened with LinkedIn           ║');
+    console.log('║  2. Log in to your LinkedIn account (skip if already in)     ║');
     console.log('║  3. If prompted, complete any 2FA/security verification      ║');
-    console.log('║  4. Once fully logged in and on the LinkedIn homepage,       ║');
+    console.log('║  4. Once your LinkedIn feed is showing,                       ║');
     console.log('║     return here and press ENTER                              ║');
     console.log('╚═══════════════════════════════════════════════════════════════╝\n');
-    
-    await rl.question('⏳ Waiting... Press ENTER when logged in: ');
-
-    const url = page.url();
-    console.log(`\n📍 Current URL: ${url}`);
-    logger.info('Account Connector → saving storage state', { currentUrl: url });
-
-    console.log('💾 Saving session to database...');
-    const storageState = await context.storageState();
 
     try {
-      const storageStateEnc = encryptJson(storageState);
-      await AccountModel.findOneAndUpdate(
-        { accountId },
-        {
-          $set: {
-            storageStateEnc,
-            storageStateUpdatedAt: new Date(),
-            authStatus: 'valid',
-            linkStatus: 'linked',
-            lastAuthError: undefined,
+      for (;;) {
+        await rl.question('⏳ Waiting... Press ENTER when logged in: ');
+        if (await hasLinkedInAuthCookie(chrome.context)) break;
+        console.log('⚠️  Not logged in yet. Finish logging in to LinkedIn in Chrome, then press ENTER again.');
+      }
+
+      const url = chrome.currentPage()?.url();
+      console.log(`\n📍 Current URL: ${url}`);
+      logger.info('Account Connector → saving storage state', { currentUrl: url });
+
+      console.log('💾 Saving session to database...');
+      const storageState = await chrome.context.storageState();
+      try {
+        const storageStateEnc = encryptJson(storageState);
+        await AccountModel.findOneAndUpdate(
+          { accountId },
+          {
+            $set: {
+              storageStateEnc,
+              storageStateUpdatedAt: new Date(),
+              authStatus: 'valid',
+              linkStatus: 'linked',
+              lastAuthError: undefined,
+            },
           },
-        },
-        { new: true }
-      ).lean();
+          { new: true }
+        ).lean();
 
-      console.log('  ✅ Session saved successfully!');
-      logger.info('Account Connector → saved storage state to MongoDB', { accountId });
-      
-      console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-      console.log('║  ✅ SUCCESS! Your account is now connected.                   ║');
-      console.log('║                                                               ║');
-      console.log('║  You can now close the browser window.                       ║');
-      console.log('║  The publishing system will use this session to post         ║');
-      console.log('║  articles on your behalf.                                    ║');
-      console.log('╚═══════════════════════════════════════════════════════════════╝\n');
-      
-    } catch (err) {
-      console.error('❌ Failed to save session:', err);
-      logger.warn('Account Connector → failed to save storage state to MongoDB', { error: String(err) });
+        console.log('  ✅ Session saved successfully!');
+        logger.info('Account Connector → saved storage state to MongoDB', { accountId });
+
+        console.log('\n╔═══════════════════════════════════════════════════════════════╗');
+        console.log('║  ✅ SUCCESS! Your account is now connected.                   ║');
+        console.log('║                                                               ║');
+        console.log('║  Chrome will now close. Start the worker to begin             ║');
+        console.log('║  publishing articles on your behalf.                          ║');
+        console.log('╚═══════════════════════════════════════════════════════════════╝\n');
+      } catch (err) {
+        console.error('❌ Failed to save session:', err);
+        logger.warn('Account Connector → failed to save storage state to MongoDB', { error: String(err) });
+      }
+    } finally {
+      logger.info('Account Connector → closing browser');
+      await chrome.close();
     }
 
-    logger.info('Account Connector → closing browser');
-    await context.close();
-    if (browser) {
-      await browser.close();
-    }
-    
     process.exit(0);
   } catch (err) {
     console.error('\n❌ Fatal error:', err);

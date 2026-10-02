@@ -8,6 +8,7 @@ import { Logger } from './engine/logger';
 import { connectMongo } from './db/mongo';
 import { encryptJson } from './db/crypto';
 import { AccountModel } from './db/models/AccountModel';
+import { hasLinkedInAuthCookie, openRealChrome } from './browser/real-chrome';
 import mongoose from 'mongoose';
 
 function getArgValue(flag: string): string | undefined {
@@ -133,95 +134,131 @@ async function main() {
 
     logger.info('Bootstrap → starting', { accountId });
 
-  const launchAndGoto = async (useProxy: boolean) => {
-    const browser = await chromium.launch({
-      headless: false,
-      proxy:
-        useProxy && account.proxy
-          ? {
-              server: account.proxy.server,
-              username: account.proxy.username,
-              password: account.proxy.password,
-            }
-          : undefined,
-    });
-
-    const context = await browser.newContext({
-      viewport: { width: 1920, height: 1080 },
-      locale: 'en-US',
-      timezoneId: account.timezone,
-    });
-
-    try {
-      const page = context.pages()[0] || (await context.newPage());
-      await page.goto('https://www.linkedin.com/', { waitUntil: 'domcontentloaded' });
-      return { browser, context, page };
-    } catch (err) {
-      try {
-        await context.close();
-      } catch {
-        // ignore
-      }
-      try {
-        await browser.close();
-      } catch {
-        // ignore
-      }
-      throw err;
-    }
-  };
-
-  let browser;
-  let context;
-  let page;
-  try {
     const useProxy = Boolean(account.proxy) && !forceNoProxy;
-    logger.info('Bootstrap → launching browser', { useProxy, forceNoProxy });
-    ({ browser, context, page } = await launchAndGoto(useProxy));
-  } catch (err) {
-    if (!forceNoProxy && Boolean(account.proxy) && isProxyConnectionFailure(err)) {
-      logger.warn('Bootstrap → proxy failed, retrying without proxy', { error: String(err) });
-      ({ browser, context, page } = await launchAndGoto(false));
-    } else {
-      throw err;
+
+    const saveStorageState = async (storageState: unknown) => {
+      try {
+        const storageStateEnc = encryptJson(storageState);
+        await AccountModel.findOneAndUpdate(
+          { accountId },
+          {
+            $set: {
+              storageStateEnc,
+              storageStateUpdatedAt: new Date(),
+              authStatus: 'valid',
+              linkStatus: 'linked',
+              lastAuthError: undefined,
+            },
+          },
+          { new: true }
+        ).lean();
+
+        logger.info('Bootstrap → saved storage state to MongoDB', { accountId });
+      } catch (err) {
+        logger.warn('Bootstrap → failed to save storage state to MongoDB', { error: String(err) });
+      }
+    };
+
+    if (!hasFlag('--playwright-browser')) {
+      // Default: the installed Google Chrome with a per-account profile. Playwright's bundled
+      // Chromium gets blocked by LinkedIn's Cloudflare check.
+      const userDataDir = resolve('./profiles', accountId);
+      if (useProxy && account.proxy?.username) {
+        logger.warn('Bootstrap → Chrome will ask for the proxy username/password in the browser window');
+      }
+      logger.info('Bootstrap → opening Google Chrome', { userDataDir, useProxy });
+      const chrome = await openRealChrome({
+        userDataDir,
+        url: 'https://www.linkedin.com/login',
+        proxyServer: useProxy ? account.proxy?.server : undefined,
+      });
+      if (chrome.closedLeftovers > 0) {
+        logger.warn('Bootstrap → closed a Chrome that was still running on this profile', { count: chrome.closedLeftovers });
+      }
+
+      try {
+        logger.info('Bootstrap → Chrome opened. Log in to LinkedIn there (skip if already logged in).');
+        for (;;) {
+          await rl.question('When the LinkedIn feed is showing, press ENTER here to save the session: ');
+          if (await hasLinkedInAuthCookie(chrome.context)) break;
+          logger.warn('Bootstrap → not logged in yet (li_at cookie missing). Finish logging in, then press ENTER again.', {
+            currentUrl: chrome.currentPage()?.url(),
+          });
+        }
+
+        logger.info('Bootstrap → saving storage state', { currentUrl: chrome.currentPage()?.url() });
+        await saveStorageState(await chrome.context.storageState());
+      } finally {
+        logger.info('Bootstrap → closing Chrome');
+        await chrome.close();
+      }
+      process.exit(0);
     }
-  }
+
+    const launchAndGoto = async (proxyOn: boolean) => {
+      const browser = await chromium.launch({
+        headless: false,
+        proxy:
+          proxyOn && account.proxy
+            ? {
+                server: account.proxy.server,
+                username: account.proxy.username,
+                password: account.proxy.password,
+              }
+            : undefined,
+      });
+
+      const context = await browser.newContext({
+        viewport: { width: 1920, height: 1080 },
+        locale: 'en-US',
+        timezoneId: account.timezone,
+      });
+
+      try {
+        const page = context.pages()[0] || (await context.newPage());
+        await page.goto('https://www.linkedin.com/', { waitUntil: 'domcontentloaded' });
+        return { browser, context, page };
+      } catch (err) {
+        try {
+          await context.close();
+        } catch {
+          // ignore
+        }
+        try {
+          await browser.close();
+        } catch {
+          // ignore
+        }
+        throw err;
+      }
+    };
+
+    let browser;
+    let context;
+    let page;
+    try {
+      logger.info('Bootstrap → launching browser', { useProxy, forceNoProxy });
+      ({ browser, context, page } = await launchAndGoto(useProxy));
+    } catch (err) {
+      if (!forceNoProxy && Boolean(account.proxy) && isProxyConnectionFailure(err)) {
+        logger.warn('Bootstrap → proxy failed, retrying without proxy', { error: String(err) });
+        ({ browser, context, page } = await launchAndGoto(false));
+      } else {
+        throw err;
+      }
+    }
 
     logger.info('Bootstrap → browser opened. Please login manually in the opened window.');
     await rl.question('When done, press ENTER here to save the session: ');
 
-  const url = page.url();
-  logger.info('Bootstrap → saving storage state', { currentUrl: url });
+    logger.info('Bootstrap → saving storage state', { currentUrl: page.url() });
+    await saveStorageState(await context.storageState());
 
-  const storageState = await context.storageState();
-
-  try {
-    const storageStateEnc = encryptJson(storageState);
-    await AccountModel.findOneAndUpdate(
-      { accountId },
-      {
-        $set: {
-          storageStateEnc,
-          storageStateUpdatedAt: new Date(),
-          authStatus: 'valid',
-          linkStatus: 'linked',
-          lastAuthError: undefined,
-        },
-      },
-      { new: true }
-    ).lean();
-
-    logger.info('Bootstrap → saved storage state to MongoDB', { accountId });
-  } catch (err) {
-    logger.warn('Bootstrap → failed to save storage state to MongoDB', { error: String(err) });
-  }
-
-  logger.info('Bootstrap → closing browser');
-
-  await context.close();
-  if (browser) {
-    await browser.close();
-  }
+    logger.info('Bootstrap → closing browser');
+    await context.close();
+    if (browser) {
+      await browser.close();
+    }
     process.exit(0);
   } finally {
     rl.close();

@@ -3,7 +3,9 @@
     "headless": true,
     "slowMo": 0,
     "defaultTimeout": 30000,
-    "initialPageLoadTimeoutMs": 120000
+    "initialPageLoadTimeoutMs": 120000,
+    "engine": "chrome",
+    "chromeWindow": "background"
   },
   "execution": {
     "maxArticlesPerRun": 1,

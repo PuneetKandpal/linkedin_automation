@@ -4,6 +4,10 @@ export interface GlobalConfig {
     slowMo: number;
     defaultTimeout: number;
     initialPageLoadTimeoutMs: number;
+    /** 'chrome' = installed Google Chrome with the account's saved profile; 'playwright' = bundled Chromium. */
+    engine?: 'chrome' | 'playwright';
+    /** engine 'chrome' only: 'background' (default) = no window shown, no focus taken (macOS + Windows); 'visible' = normal window. */
+    chromeWindow?: 'background' | 'visible';
   };
   execution: {
     maxArticlesPerRun: number;

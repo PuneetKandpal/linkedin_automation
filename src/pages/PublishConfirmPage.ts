@@ -201,10 +201,27 @@ export class PublishConfirmPage extends BasePage {
         return true;
       }
 
+      // LinkedIn sometimes skips the "Congrats" modal and lands straight on the live article
+      // (/pulse/<slug>/). That navigation often finishes while the post-publish dialog is being
+      // dismissed, i.e. before this wait starts, so don't require the URL to change here.
+      if (this.isPublishedArticleUrl(currentUrl)) {
+        return true;
+      }
+
       await this.delayEngine.wait(500);
     }
 
     return false;
+  }
+
+  /** A live article page, not the editor (/article/new, /article/edit, /pulse/edit). */
+  private isPublishedArticleUrl(url: string): boolean {
+    try {
+      const path = new URL(url).pathname;
+      return /^\/pulse\/[^/]+/.test(path) && !path.startsWith('/pulse/edit');
+    } catch {
+      return false;
+    }
   }
 
   async getPublishedArticleUrl(): Promise<string | null> {

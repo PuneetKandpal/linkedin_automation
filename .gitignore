@@ -34,3 +34,6 @@ client-config.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Client tool packages (contain client-config.json credentials)
+linkedin-publisher-client-tools*.zip

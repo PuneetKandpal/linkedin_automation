@@ -1,8 +1,18 @@
-import { Page } from '@playwright/test';
+import { Locator, Page } from '@playwright/test';
 import { mkdirSync } from 'fs';
 import { Logger } from '../engine/logger';
 import { HumanEngine } from '../engine/human.engine';
 import { DelayEngine } from '../engine/delay.engine';
+import { PageUnresponsiveError } from '../errors/error.types';
+
+/** Rejects with `onTimeout()` if `work` has not settled within `ms`. */
+export function withTimeout<T>(work: Promise<T>, ms: number, onTimeout: () => Error): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(onTimeout()), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
 
 /**
  * BasePage centralises helpers shared by all LinkedIn screens.
@@ -28,10 +38,36 @@ export abstract class BasePage {
 
   async isVisible(selector: string): Promise<boolean> {
     try {
-      const element = this.page.locator(selector).first();
-      return await element.isVisible({ timeout: 5000 });
+      return await this.isLocatorVisible(this.page.locator(selector).first());
     } catch {
       return false;
+    }
+  }
+
+  /** Playwright ignores isVisible's timeout option, so a frozen tab would block here forever. */
+  protected isLocatorVisible(locator: Locator, timeoutMs = 5000): Promise<boolean> {
+    return withTimeout(locator.isVisible(), timeoutMs, () => new Error(`isVisible timed out after ${timeoutMs}ms`));
+  }
+
+  /**
+   * Throws PageUnresponsiveError if the tab does not answer a trivial script within `timeoutMs`.
+   * A tab stuck in a busy loop never answers, and every later page call would wait on it forever.
+   */
+  protected async assertPageResponsive(timeoutMs = 10000): Promise<void> {
+    try {
+      await withTimeout(
+        this.page.evaluate('document.readyState'),
+        timeoutMs,
+        () =>
+          new PageUnresponsiveError(
+            'LinkedIn tab is not responding (the page froze). This usually means LinkedIn rejected the saved ' +
+              'session: check the Chrome window and, if it shows a login page, reconnect the account with li-connect.',
+            { step: 'page_unresponsive', url: this.page.url(), timeoutMs }
+          )
+      );
+    } catch (err) {
+      if (err instanceof PageUnresponsiveError) throw err;
+      // Any other failure (e.g. a navigation replaced the page mid-call) means the tab is alive.
     }
   }
 

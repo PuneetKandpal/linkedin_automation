@@ -319,17 +319,10 @@ export async function openRealChrome(params: {
 
   const quit = async () => {
     // Quit Chrome cleanly so the profile (and its cookies) are flushed to disk.
-    try {
-      const cdp = await browser.newBrowserCDPSession();
-      await cdp.send('Browser.close');
-    } catch {
-      // ignore
-    }
-    try {
-      await browser.close();
-    } catch {
-      // ignore
-    }
+    // Bounded: a frozen tab can leave Browser.close unanswered, and the process is killed below anyway.
+    const bounded = (work: Promise<unknown>) => Promise.race([work.catch(() => undefined), sleep(5000)]);
+    await bounded(browser.newBrowserCDPSession().then(cdp => cdp.send('Browser.close')));
+    await bounded(browser.close());
     if (child && child.exitCode === null) child.kill();
   };
 

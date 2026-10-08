@@ -51,6 +51,13 @@ export class LoginRedirectError extends PublisherError {
   }
 }
 
+export class PageUnresponsiveError extends PublisherError {
+  constructor(message: string, metadata?: Record<string, unknown>) {
+    super(ErrorCode.TIMEOUT, message, metadata);
+    this.name = 'PageUnresponsiveError';
+  }
+}
+
 export class EditorError extends PublisherError {
   constructor(message: string, metadata?: Record<string, unknown>) {
     super(ErrorCode.EDITOR_NOT_READY, message, metadata);

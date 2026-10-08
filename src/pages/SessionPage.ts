@@ -21,6 +21,8 @@ export class SessionPage extends BasePage {
   async ensureLoggedIn(): Promise<void> {
     this.logger.info('Validating session state');
 
+    await this.assertPageResponsive();
+
     const currentUrl = await this.getCurrentUrl();
 
     if (this.isLoginPage(currentUrl)) {
@@ -64,7 +66,10 @@ export class SessionPage extends BasePage {
   }
 
   private isLoginPage(url: string): boolean {
-    return url.includes('/login') || url.includes('/uas/login') || url.includes('/authwall');
+    if (url.includes('/login') || url.includes('/uas/login') || url.includes('/authwall')) return true;
+    // /hp and /signup are the signed-out landing pages LinkedIn redirects guests to.
+    const path = url.replace(/^https?:\/\/[^/]+/i, '').split(/[?#]/)[0];
+    return path === '/hp' || path.startsWith('/hp/') || path.startsWith('/signup');
   }
 
   private async hasAuthCookie(): Promise<boolean> {

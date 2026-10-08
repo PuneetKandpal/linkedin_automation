@@ -24,6 +24,7 @@ export interface AccountDoc {
   };
   companyPages?: CompanyPage[];
   authStatus: AuthStatus;
+  profileSlug?: string;
   storageStateEnc?: string;
   storageStateUpdatedAt?: Date;
   lastAuthError?: string;
@@ -70,6 +71,7 @@ const AccountSchema = new SchemaAny(
     storageStateEnc: { type: String, required: false },
     storageStateUpdatedAt: { type: Date, required: false },
     lastAuthError: { type: String, required: false },
+    profileSlug: { type: String, required: false },
   } as any,
   { timestamps: true }
 );

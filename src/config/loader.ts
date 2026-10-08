@@ -46,6 +46,7 @@ export class ConfigLoader {
       login: this.loadJSON('selectors/login.json'),
       articleEditor: this.loadJSON('selectors/article-editor.json'),
       publish: this.loadJSON('selectors/publish.json'),
+      follow: this.loadJSON('selectors/follow.json'),
     };
 
     return {

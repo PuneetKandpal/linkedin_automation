@@ -73,6 +73,8 @@ export interface DelayRange {
   betweenParagraphs: [number, number];
   beforePublish: [number, number];
   afterPublish: [number, number];
+  betweenFollows?: [number, number];
+  beforeFollowClick?: [number, number];
 }
 
 export interface DelayProfiles {
@@ -94,11 +96,26 @@ export interface Selectors {
   [key: string]: string;
 }
 
+export interface FollowSelectors {
+  topCard: string;
+  topCardAlt?: string;
+  adminNav?: string;
+  challengeWall: string;
+  challengeWallText?: string;
+  pageNotFound: string;
+  followButton: string;
+  followButtonAlt?: string;
+  followingButton: string;
+  followingButtonAlt?: string;
+  [key: string]: string | undefined;
+}
+
 export interface AllSelectors {
   common: Selectors;
   login: Selectors;
   articleEditor: Selectors;
   publish: Selectors;
+  follow: FollowSelectors;
 }
 
 export interface AppConfig {

@@ -42,6 +42,16 @@ export class DelayEngine {
     await this.waitWithLabel('afterPublish', min, max);
   }
 
+  async betweenFollows(): Promise<void> {
+    const [min, max] = this.delayProfile.betweenFollows ?? [25000, 70000];
+    await this.waitWithLabel('betweenFollows', min, max);
+  }
+
+  async beforeFollowClick(): Promise<void> {
+    const [min, max] = this.delayProfile.beforeFollowClick ?? [3000, 8000];
+    await this.waitWithLabel('beforeFollowClick', min, max);
+  }
+
   async wait(ms: number): Promise<void> {
     this.logger?.debug('DelayEngine → wait', { ms });
     return new Promise(resolve => setTimeout(resolve, ms));

@@ -1,0 +1,12 @@
+{
+  "topCard": "section.org-top-card",
+  "topCardAlt": "section[class*='org-top-card']",
+  "adminNav": "section[aria-label='Organizational page admin navigation section']",
+  "challengeWall": "iframe[src*='checkpoint']",
+  "challengeWallText": "text=/unusual activity|verify your identity|security verification|quick security check|captcha|confirm it['’]s you/i",
+  "pageNotFound": "text=/this linkedin page isn['’]t available|page not found|no longer exists|no longer available|this page doesn['’]t exist/i",
+  "followButton": "button.org-company-follow-button[aria-pressed='false']",
+  "followButtonAlt": "button[data-view-name='pages-top-card-follow-page']",
+  "followingButton": "button.org-company-follow-button[aria-pressed='true']",
+  "followingButtonAlt": "button[data-view-name='pages-top-card-unfollow-page']"
+}

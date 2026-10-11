@@ -100,14 +100,17 @@ export interface Selectors {
 export interface FollowSelectors {
   topCard: string;
   topCardAlt?: string;
+  topCardByKey?: string;
   adminNav?: string;
   challengeWall: string;
   challengeWallText?: string;
   pageNotFound: string;
   followButton: string;
   followButtonAlt?: string;
+  followButtonByLabel?: string;
   followingButton: string;
   followingButtonAlt?: string;
+  followingButtonByLabel?: string;
   [key: string]: string | undefined;
 }
 

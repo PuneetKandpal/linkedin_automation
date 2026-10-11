@@ -14,6 +14,11 @@ export type CompanyFollowState =
   | 'notfound'
   | 'unknown';
 
+/** The candidates follow.json actually sets, in order: the newer keys are optional there. */
+function configured(...candidates: Array<string | undefined>): string[] {
+  return candidates.filter((s): s is string => typeof s === 'string' && s.length > 0);
+}
+
 /**
  * Company page follow/unfollow surface. LinkedIn markup changes often, so every
  * state check runs a list of selector candidates and classifies the matched
@@ -24,6 +29,15 @@ export type CompanyFollowState =
  * Buttons are only ever looked up inside the page's own top card: the right
  * rail ("Pages people also viewed", promoted pages) is full of Follow buttons
  * for other companies, and clicking one of those would follow the wrong page.
+ *
+ * LinkedIn is rolling out a redesigned company page, so some accounts get the
+ * classic layout (section.org-top-card, org-company-follow-button) and some the
+ * redesign. The redesign has hashed class names and, on some pages, no
+ * data-view-name at all: its top card is the component keyed
+ * "pages.topCard.<id>" and its buttons are known only by their labels
+ * ("Follow <name>", "Following, click to unfollow <name>"). It also keeps an
+ * inert copy of the top card in a hidden sticky header; that copy sits outside
+ * the top card, so it is never picked either.
  *
  * Pages are opened in member view (?viewAsMember=true). An account that
  * administers a page is otherwise redirected to the admin dashboard, which has
@@ -54,7 +68,7 @@ export class CompanyFollowPage extends BasePage {
     if (!this.stateFromUrl()) {
       const settled = await this.waitForAnyVisible(
         [
-          this.followSelectors.topCard,
+          ...this.topCardCandidates(),
           this.followSelectors.adminNav,
           this.followSelectors.challengeWall,
           this.followSelectors.challengeWallText,
@@ -176,22 +190,24 @@ export class CompanyFollowPage extends BasePage {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
+  private topCardCandidates(): string[] {
+    const s = this.followSelectors;
+    return configured(s.topCard, s.topCardAlt, s.topCardByKey);
+  }
+
   private followButtonCandidates(): string[] {
-    return [this.followSelectors.followButton, this.followSelectors.followButtonAlt].filter(
-      (s): s is string => typeof s === 'string' && s.length > 0
-    );
+    const s = this.followSelectors;
+    return configured(s.followButton, s.followButtonAlt, s.followButtonByLabel);
   }
 
   private followingButtonCandidates(): string[] {
-    return [this.followSelectors.followingButton, this.followSelectors.followingButtonAlt].filter(
-      (s): s is string => typeof s === 'string' && s.length > 0
-    );
+    const s = this.followSelectors;
+    return configured(s.followingButton, s.followingButtonAlt, s.followingButtonByLabel);
   }
 
   /** The page's own top card, or null. Never falls back to the whole page (see class doc). */
   private async resolveScope(): Promise<Locator | null> {
-    for (const selector of [this.followSelectors.topCard, this.followSelectors.topCardAlt]) {
-      if (!selector) continue;
+    for (const selector of this.topCardCandidates()) {
       try {
         const topCard = this.page.locator(selector).first();
         if (await this.isLocatorVisible(topCard, 3000)) return topCard;

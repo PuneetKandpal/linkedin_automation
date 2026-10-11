@@ -1,12 +1,15 @@
 {
   "topCard": "section.org-top-card",
   "topCardAlt": "section[class*='org-top-card']",
+  "topCardByKey": "div[componentkey^='pages.topCard.']",
   "adminNav": "section[aria-label='Organizational page admin navigation section']",
   "challengeWall": "iframe[src*='checkpoint']",
   "challengeWallText": "text=/unusual activity|verify your identity|security verification|quick security check|captcha|confirm it['’]s you/i",
   "pageNotFound": "text=/this linkedin page isn['’]t available|page not found|no longer exists|no longer available|this page doesn['’]t exist/i",
   "followButton": "button.org-company-follow-button[aria-pressed='false']",
   "followButtonAlt": "button[data-view-name='pages-top-card-follow-page']",
+  "followButtonByLabel": "button[aria-label^='Follow ']",
   "followingButton": "button.org-company-follow-button[aria-pressed='true']",
-  "followingButtonAlt": "button[data-view-name='pages-top-card-unfollow-page']"
+  "followingButtonAlt": "button[data-view-name='pages-top-card-unfollow-page']",
+  "followingButtonByLabel": "button[aria-label^='Following']"
 }

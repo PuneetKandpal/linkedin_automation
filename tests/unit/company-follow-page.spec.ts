@@ -34,15 +34,35 @@ test.describe('state read from the URL alone', () => {
   }
 });
 
+/**
+ * The selectors each layout answers to, and its button labels. The redesign only answers to the newer
+ * keys, with LinkedIn's real labels, so tests on it fail if those keys are not wired in.
+ */
+const LAYOUTS = {
+  classic: {
+    topCard: [sel.topCard, sel.topCardAlt],
+    follow: [sel.followButton, sel.followButtonAlt],
+    following: [sel.followingButton, sel.followingButtonAlt],
+    label: { follow: 'Follow', following: 'Following' },
+  },
+  redesign: {
+    topCard: [sel.topCardByKey],
+    follow: [sel.followButtonByLabel],
+    following: [sel.followingButtonByLabel],
+    label: { follow: 'Follow Acme', following: 'Following, click to unfollow Acme' },
+  },
+};
+
 /** persist: 'click' = server keeps the follow at once; 'reload2' = visible from the 2nd reload; 'never' = request lost. */
-function makeFake(opts: { startFollowing?: boolean; persist?: 'click' | 'reload2' | 'never'; clickDoesNothing?: boolean; signedOutOnReload?: boolean } = {}) {
-  const { startFollowing = false, persist = 'click', clickDoesNothing = false, signedOutOnReload = false } = opts;
+function makeFake(opts: { startFollowing?: boolean; persist?: 'click' | 'reload2' | 'never'; clickDoesNothing?: boolean; signedOutOnReload?: boolean; layout?: keyof typeof LAYOUTS } = {}) {
+  const { startFollowing = false, persist = 'click', clickDoesNothing = false, signedOutOnReload = false, layout = 'classic' } = opts;
   const st = { ui: startFollowing, server: startFollowing, reloads: 0, clicks: 0, url: 'https://www.linkedin.com/company/acme/?viewAsMember=true' };
-  const isFollowSel = (s: string) => s === sel.followButton || s === sel.followButtonAlt;
-  const isFollowingSel = (s: string) => s === sel.followingButton || s === sel.followingButtonAlt;
+  const L = LAYOUTS[layout];
+  const isFollowSel = (s: string) => L.follow.includes(s);
+  const isFollowingSel = (s: string) => L.following.includes(s);
   const button = (kind: 'follow' | 'following') => ({
     isVisible: async () => true,
-    getAttribute: async (n: string) => (n === 'aria-label' ? (kind === 'follow' ? 'Follow' : 'Following') : n === 'aria-pressed' ? String(kind === 'following') : null),
+    getAttribute: async (n: string) => (n === 'aria-label' ? L.label[kind] : n === 'aria-pressed' ? String(kind === 'following') : null),
     textContent: async () => (kind === 'follow' ? 'Follow' : 'Following'),
     scrollIntoViewIfNeeded: async () => {},
     hover: async () => {},
@@ -70,7 +90,7 @@ function makeFake(opts: { startFollowing?: boolean; persist?: 'click' | 'reload2
       st.ui = st.server; // a reload shows what the server really has
     },
     locator: (s: string) => ({
-      first: () => (s === sel.topCard || s === sel.topCardAlt ? topCard : { isVisible: async () => false }),
+      first: () => (L.topCard.includes(s) ? topCard : { isVisible: async () => false }),
       ...collection(s),
     }),
   };
@@ -126,5 +146,27 @@ test.describe('follow() only counts a follow that survives a reload', () => {
     expect(await fp.follow()).toBe(false);
     expect(st.reloads).toBe(1);
     expect(await fp.detectState()).toBe('loggedout');
+  });
+});
+
+test.describe('redesigned company page (pages.topCard component, buttons known only by their labels)', () => {
+  test('detects the Follow button', async () => {
+    expect(await makeFake({ layout: 'redesign' }).fp.detectState()).toBe('follow');
+  });
+
+  test('"Following, click to unfollow <name>" reads as following', async () => {
+    expect(await makeFake({ layout: 'redesign', startFollowing: true }).fp.detectState()).toBe('following');
+  });
+
+  test('a follow is clicked once and confirmed by a reload', async () => {
+    const { fp, st } = makeFake({ layout: 'redesign', persist: 'click' });
+    expect(await fp.follow()).toBe(true);
+    expect([st.clicks, st.reloads]).toEqual([1, 1]);
+  });
+
+  test('already following: no click', async () => {
+    const { fp, st } = makeFake({ layout: 'redesign', startFollowing: true });
+    expect(await fp.follow()).toBe(true);
+    expect(st.clicks).toBe(0);
   });
 });

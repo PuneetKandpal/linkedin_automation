@@ -74,6 +74,7 @@ export interface DelayRange {
   beforePublish: [number, number];
   afterPublish: [number, number];
   betweenFollows?: [number, number];
+  betweenChecks?: [number, number];
   beforeFollowClick?: [number, number];
 }
 

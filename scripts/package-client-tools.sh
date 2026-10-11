@@ -36,6 +36,7 @@ cp -r config/ client-tools/config/
 cp package.json client-tools/
 cp package-lock.json client-tools/
 cp .env.example client-tools/
+cp follow-list.xlsx client-tools/
 
 # Shared client config (recommended)
 if [ -f "client-config.json" ]; then
@@ -44,64 +45,11 @@ else
     cp client-config.json.example client-tools/
 fi
 
-# Create client README
-cat > client-tools/README.md << 'EOF'
-# LinkedIn Publisher - Client Tools
-
-## Requirements
-- Node.js 18 or higher
-- macOS, Windows, or Linux
-
-## Quick Start
-
-1. **Install dependencies**:
-   ```bash
-   npm install
-   npx playwright install chromium
-   ```
-
-2. **Configure (recommended)**:
-   - Edit `client-config.json` if present.
-   - If only `client-config.json.example` exists, rename it:
-     ```bash
-     mv client-config.json.example client-config.json
-     ```
-   - Then edit `client-config.json` and set `mongodbUri` and `storageStateSecret`.
-
-3. **Connect LinkedIn Account**:
-   ```bash
-   node cli/li-connect.js
-   ```
-
-4. **Run Worker** (optional):
-   ```bash
-   node cli/li-worker.js
-   ```
-
-5. **Follow company pages from an Excel list** (optional):
-   ```bash
-   node cli/li-follow.js --accountId <your-account-id> --file companies.xlsx --headed
-   ```
-   - The workbook needs `Page Name` and `URL` columns. Results are written to a column
-     named after the account id (added automatically), so one workbook can hold many users.
-   - Close the workbook in Excel before running. Add `--dry-run` to preview without a browser.
-   - On a laptop, prefix long runs with `caffeinate -i` (macOS) so the machine does not sleep.
-
-## Full Documentation
-
-See PRODUCTION_DEPLOYMENT_GUIDE.md for complete setup instructions.
-
-## Support
-
-Contact your admin for:
-- MongoDB URI
-- Storage state secret
-- Troubleshooting assistance
-
----
-
-Version: ${VERSION}
-EOF
+# Client README (the step-by-step guide clients follow)
+cp docs/CLIENT_FOLLOW_README.md client-tools/README.md
+# Double-click launchers (Mac .command keeps its executable bit in the zip)
+cp scripts/client/*.command scripts/client/*.bat client-tools/
+chmod +x client-tools/*.command
 
 echo "✅ Files copied"
 echo ""

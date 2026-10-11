@@ -100,7 +100,7 @@ async function main() {
     if (!accountId || accountId.trim().length === 0) {
       console.log('\n👤 Account Information');
       console.log('Please provide a unique identifier for this account.\n');
-      accountId = await promptValue(rl, 'Account ID (e.g., client_001)', { required: true });
+      accountId = await promptValue(rl, 'Account ID – a short name for this account, e.g. john', { required: true });
     }
 
     const forceNoProxy = hasFlag('--no-proxy') || process.env.NO_PROXY === '1' || process.env.NO_PROXY === 'true';
@@ -129,7 +129,7 @@ async function main() {
 
     console.log('\n📇 Account Details');
     
-    const displayNameDefault = getArgValue('--display-name') || process.env.DISPLAY_NAME || existing?.displayName || '';
+    const displayNameDefault = getArgValue('--display-name') || process.env.DISPLAY_NAME || existing?.displayName || accountId;
     const emailDefault = getArgValue('--email') || process.env.EMAIL || existing?.email || '';
     const timezoneDefault = getArgValue('--timezone') || process.env.TIMEZONE || existing?.timezone || 'UTC';
 
@@ -138,7 +138,7 @@ async function main() {
       required: true,
     });
 
-    const email = await promptValue(rl, 'Email', {
+    const email = await promptValue(rl, 'Email (the one you log in to LinkedIn with)', {
       defaultValue: emailDefault || undefined,
       required: true,
     });
@@ -260,8 +260,8 @@ async function main() {
         console.log('\n╔═══════════════════════════════════════════════════════════════╗');
         console.log('║  ✅ SUCCESS! Your account is now connected.                   ║');
         console.log('║                                                               ║');
-        console.log('║  Chrome will now close. Start the worker to begin             ║');
-        console.log('║  publishing articles on your behalf.                          ║');
+        console.log('║  Chrome will now close. You can now run the follow            ║');
+        console.log('║  automation (or the publishing worker).                       ║');
         console.log('╚═══════════════════════════════════════════════════════════════╝\n');
       } catch (err) {
         console.error('❌ Failed to save session:', err);

@@ -1,0 +1,12 @@
+{
+  "nextButton": "role=button[name='Next']",
+  "publishButton": "role=button[name='Publish']",
+  "dismissButton": "role=button[name='Dismiss']",
+  "shareModalText": "role=dialog >> role=textbox",
+  "finalTextEditor": "role=textbox[name='Text editor for creating']",
+  "getLinkButton": "role=button[name='Get the link to this article']",
+  "linkCopiedToast": "text=Link copied to clipboard.",
+  "linkCopiedDismissButton": "role=button[name^='Dismiss']",
+  "congratsHeading": "role=heading[name^='Congrats on publishing your']",
+  "successIndicator": "text=/Article published|Successfully published/"
+}

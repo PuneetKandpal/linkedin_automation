@@ -1,0 +1,20 @@
+{
+  "slow": {
+    "minDelay": 80,
+    "maxDelay": 220,
+    "typoChance": 0.03,
+    "thinkingPauseChance": 0.05
+  },
+  "medium": {
+    "minDelay": 40,
+    "maxDelay": 160,
+    "typoChance": 0.02,
+    "thinkingPauseChance": 0.03
+  },
+  "fast": {
+    "minDelay": 20,
+    "maxDelay": 80,
+    "typoChance": 0.01,
+    "thinkingPauseChance": 0.01
+  }
+}

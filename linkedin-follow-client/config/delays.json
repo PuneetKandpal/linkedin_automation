@@ -1,0 +1,14 @@
+{
+  "default": {
+    "preLaunch": [3000, 8000],
+    "beforeEditorFocus": [1000, 3000],
+    "betweenParagraphs": [800, 2500],
+    "beforePublish": [3000, 7000],
+    "afterPublish": [6000, 12000]
+  },
+  "follow": {
+    "betweenFollows": [15000, 35000],
+    "betweenChecks": [5000, 12000],
+    "beforeFollowClick": [1500, 4000]
+  }
+}

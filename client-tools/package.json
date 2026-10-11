@@ -21,6 +21,7 @@
     "build:cli:win": "npm run build && pkg cli/li-connect.js cli/li-worker.js cli/li-follow.js --targets node18-win-x64 --out-path cli-dist",
     "build:cli:linux": "npm run build && pkg cli/li-connect.js cli/li-worker.js cli/li-follow.js --targets node18-linux-x64 --out-path cli-dist",
     "follow": "node cli/li-follow.js",
+    "test:unit": "playwright test -c playwright.unit.config.ts",
     "start": "node dist/index.js",
     "start:server": "node dist/server.js",
     "dev": "ts-node src/index.ts",

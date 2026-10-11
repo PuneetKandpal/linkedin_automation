@@ -58,6 +58,13 @@ export class PageUnresponsiveError extends PublisherError {
   }
 }
 
+export class BrowserClosedError extends PublisherError {
+  constructor(message: string, metadata?: Record<string, unknown>) {
+    super(ErrorCode.UNKNOWN, message, metadata);
+    this.name = 'BrowserClosedError';
+  }
+}
+
 export class EditorError extends PublisherError {
   constructor(message: string, metadata?: Record<string, unknown>) {
     super(ErrorCode.EDITOR_NOT_READY, message, metadata);

@@ -9,7 +9,7 @@ import { SessionPage } from '../pages/SessionPage';
 import { CompanyFollowPage } from '../pages/CompanyFollowPage';
 import { FollowRow, FollowWorkbook, loadFollowWorkbook } from './follow-excel';
 import { AccountModel } from '../db/models/AccountModel';
-import { ErrorCode, LoginRedirectError, PageUnresponsiveError, PublisherError } from '../errors/error.types';
+import { BrowserClosedError, ErrorCode, LoginRedirectError, PageUnresponsiveError, PublisherError } from '../errors/error.types';
 
 export interface FollowRunSummary {
   processed: number;
@@ -41,7 +41,12 @@ const MAX_CONSECUTIVE_PROBLEMS = 4;
 
 /** Errors that say nothing about one company but make continuing pointless. The current row stays blank. */
 function isRunHalting(err: unknown): boolean {
-  return err instanceof PageUnresponsiveError || err instanceof LoginRedirectError;
+  return err instanceof PageUnresponsiveError || err instanceof LoginRedirectError || err instanceof BrowserClosedError;
+}
+
+/** Playwright's wording when Chrome is gone (closed by hand, crashed, or lost while the machine slept). */
+function isBrowserClosed(err: unknown): boolean {
+  return /(page|context|browser) has been closed|target closed|browser closed|connection closed/i.test(String(err));
 }
 
 /** Fisher-Yates shuffle — varies the visit order per run so the footprint is not identical every time. */
@@ -165,7 +170,13 @@ export class FollowRunner {
         if (outcome === 'challenge') summary.challengeHalt = true;
         problem = outcome === 'problem';
       } catch (err) {
-        // Signed out or a frozen tab says nothing about this company; leave the row blank and stop the run.
+        // Signed out, a frozen tab or a dead browser says nothing about this company; leave the row blank and stop the run.
+        if (isBrowserClosed(err)) {
+          throw new BrowserClosedError(
+            'Chrome was closed during the run (closed by hand, crashed, or lost while the computer slept). Re-run to continue: finished rows are kept.',
+            { rowIndex: row.rowIndex, error: String(err) }
+          );
+        }
         if (isRunHalting(err)) throw err;
         summary.failed++;
         problem = true;
@@ -206,7 +217,9 @@ export class FollowRunner {
       // Pace page visits only: a row that never opened LinkedIn, or has nothing left to visit after it, needs no wait.
       const visitLater = batch.slice(i + 1).some(r => r.normalizedUrl && !resolved.has(r.normalizedUrl.toLowerCase()));
       if (row.normalizedUrl && visitLater) {
-        await delayEngine.betweenFollows();
+        // Only an actual follow earns the long pause; a page that needed no click is just a page view.
+        if (row.status === 'Followed') await delayEngine.betweenFollows();
+        else await delayEngine.betweenChecks();
       }
     }
 

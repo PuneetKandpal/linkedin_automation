@@ -43,12 +43,18 @@ export class DelayEngine {
   }
 
   async betweenFollows(): Promise<void> {
-    const [min, max] = this.delayProfile.betweenFollows ?? [25000, 70000];
+    const [min, max] = this.delayProfile.betweenFollows ?? [15000, 35000];
     await this.waitWithLabel('betweenFollows', min, max);
   }
 
+  /** Pause after a page where nothing was clicked (already following, 404, ...): a page view, not a follow. */
+  async betweenChecks(): Promise<void> {
+    const [min, max] = this.delayProfile.betweenChecks ?? [5000, 12000];
+    await this.waitWithLabel('betweenChecks', min, max);
+  }
+
   async beforeFollowClick(): Promise<void> {
-    const [min, max] = this.delayProfile.beforeFollowClick ?? [3000, 8000];
+    const [min, max] = this.delayProfile.beforeFollowClick ?? [1500, 4000];
     await this.waitWithLabel('beforeFollowClick', min, max);
   }
 

@@ -1,0 +1,4 @@
+{
+  "mongodbUri": "PASTE-MONGODB-URI-FROM-YOUR-ADMIN",
+  "storageStateSecret": "PASTE-STORAGE-SECRET-FROM-YOUR-ADMIN"
+}

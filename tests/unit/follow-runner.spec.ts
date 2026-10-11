@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { FollowRunner, pickProfileSlug } from '../../src/services/follow-runner';
 import { loadFollowWorkbook } from '../../src/services/follow-excel';
-import { ErrorCode, LoginRedirectError, PageUnresponsiveError, PublisherError } from '../../src/errors/error.types';
+import { BrowserClosedError, ErrorCode, LoginRedirectError, PageUnresponsiveError, PublisherError } from '../../src/errors/error.types';
 
 const dir = mkdtempSync(join(tmpdir(), 'follow-runner-'));
 const quiet: any = { info() {}, warn() {}, error() {}, debug() {} };
@@ -41,6 +41,7 @@ async function run(s: Scenario) {
 
   let shots = 0;
   let delays = 0;
+  let followPauses = 0;
   const visits: string[] = [];
   const page: any = {
     url: () => 'https://www.linkedin.com/feed/',
@@ -52,7 +53,7 @@ async function run(s: Scenario) {
     screenshot: async () => { shots++; },
     waitForTimeout: async () => {},
   };
-  const delayEngine: any = { wait: async () => {}, betweenFollows: async () => { delays++; }, beforeFollowClick: async () => {} };
+  const delayEngine: any = { wait: async () => {}, betweenFollows: async () => { delays++; followPauses++; }, betweenChecks: async () => { delays++; }, beforeFollowClick: async () => {} };
   const runner: any = new FollowRunner({
     account: { accountId: 'unit', profileSlug: '' },
     excelPath: file,
@@ -91,7 +92,7 @@ async function run(s: Scenario) {
   }
   const byRow = loadFollowWorkbook(file, 'unit').rows.map(r => `${r.status || '(blank)'}${r.note ? ` [${r.note}]` : ''}`);
   unlinkSync(file);
-  return { error, summary, byRow, visits, shots, delays };
+  return { error, summary, byRow, visits, shots, delays, followPauses };
 }
 const rows = (...slugs: string[]): Spec[] => slugs.map(slug => ({ slug }));
 
@@ -242,5 +243,23 @@ test.describe('own profile slug from the feed', () => {
 
   test('url-encoded slugs are decoded', () => {
     expect(pickProfileSlug('https://www.linkedin.com/in/jos%C3%A9-p/', [])).toBe('josé-p');
+  });
+});
+
+test.describe('browser closed mid-run', () => {
+  test('halts at the first dead-browser error and leaves the row blank (no Failed marks)', async () => {
+    const dead = () => new Error('page.goto: Target page, context or browser has been closed');
+    const r = await run({ rows: rows('a', 'b', 'c', 'd', 'e'), throwOn: { b: dead, c: dead, d: dead } });
+    expect(r.error).toBeInstanceOf(BrowserClosedError);
+    expect(r.byRow).toEqual(['Already following', '(blank)', '(blank)', '(blank)', '(blank)']);
+  });
+});
+
+test.describe('pause length', () => {
+  test('the long pause follows a real follow; pages needing no click get the short one', async () => {
+    const r = await run({ rows: rows('a', 'b', 'c', 'd'), states: { a: 'follow', b: 'following', c: 'follow', d: 'following' } });
+    expect(r.byRow).toEqual(['Followed', 'Already following', 'Followed', 'Already following']);
+    expect(r.delays).toBe(3);
+    expect(r.followPauses).toBe(2); // after a and c; b got the short pause
   });
 });

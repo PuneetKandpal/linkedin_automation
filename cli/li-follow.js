@@ -3,7 +3,8 @@
  * LinkedIn Company Follow CLI
  * 
  * Usage:
- *   li-follow --accountId "..." --file "<workbook.xlsx>" [--headed]
+ *   li-follow --accountId "..." [--file "<workbook.xlsx>"] [--headed]
+ *   (without --file the list is read from follow-list.xlsx next to this tool)
  *   (MongoDB URI and secret are read from client-config.json or .env; pass
  *    --mongodb-uri "..." --secret "..." only to override them.)
  * 
@@ -11,7 +12,7 @@
  *   li-follow --dry-run --file "<workbook.xlsx>" [--max-per-run N]
  * 
  * Or with environment variables:
- *   MONGODB_URI="..." STORAGE_STATE_SECRET="..." li-follow --accountId "..." --file "<workbook.xlsx>"
+ *   MONGODB_URI="..." STORAGE_STATE_SECRET="..." li-follow --accountId "..." [--file "<workbook.xlsx>"]
  */
 
 const path = require('path');
@@ -38,16 +39,6 @@ try {
   }
 } catch (e) {
   // If config is invalid, fall back to CLI/env-driven config.
-}
-
-const args = process.argv.slice(2);
-const file = args.find((_, i) => args[i - 1] === '--file');
-if (!file) {
-  // eslint-disable-next-line no-console
-  console.error('❌ Missing required --file "<workbook.xlsx>".');
-  // eslint-disable-next-line no-console
-  console.error('Usage: li-follow --accountId "<accountId>" --file "<workbook.xlsx>" [--max-per-run N] [--headed] [--config-dir ./config] [--dry-run]');
-  process.exit(1);
 }
 
 // Run the follow CLI

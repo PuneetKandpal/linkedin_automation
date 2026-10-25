@@ -7,6 +7,7 @@
   "bin": {
     "li-connect": "cli/li-connect.js",
     "li-follow": "cli/li-follow.js",
+    "li-generate": "cli/li-generate.js",
     "li-worker": "cli/li-worker.js"
   },
   "scripts": {
@@ -21,12 +22,14 @@
     "build:cli:win": "npm run build && pkg cli/li-connect.js cli/li-worker.js cli/li-follow.js --targets node18-win-x64 --out-path cli-dist",
     "build:cli:linux": "npm run build && pkg cli/li-connect.js cli/li-worker.js cli/li-follow.js --targets node18-linux-x64 --out-path cli-dist",
     "follow": "node cli/li-follow.js",
+    "generate": "node cli/li-generate.js",
     "test:unit": "playwright test -c playwright.unit.config.ts",
     "start": "node dist/index.js",
     "start:server": "node dist/server.js",
     "dev": "ts-node src/index.ts",
     "dev:server": "ts-node src/server.ts",
     "dev:worker": "ts-node src/worker.ts",
+    "dev:generate": "ts-node src/cli/generate-cli.ts",
     "bootstrap": "ts-node src/bootstrap.ts",
     "codegen": "npx playwright codegen --browser=chromium --user-data-dir=./profiles/acct_01 https://www.linkedin.com",
     "trace:show": "npx playwright show-trace ./output/traces/latest.zip",
@@ -57,12 +60,15 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "1.1.0",
+    "@google/genai": "2.31.0",
     "@playwright/test": "^1.58.0",
     "cors": "2.8.6",
     "dotenv": "17.2.3",
     "express": "^4.21.2",
     "marked": "^12.0.2",
     "mongoose": "^8.10.0",
+    "openai": "7.43.0",
     "sanitize-html": "^2.12.1",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0",

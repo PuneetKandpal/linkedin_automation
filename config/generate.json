@@ -1,0 +1,17 @@
+{
+  "html": { "provider": "claude", "model": "claude-haiku-5-5", "maxTokens": 64000 },
+  "markdown": { "provider": "gemini", "model": "gemini-3.1-flash-lite", "maxTokens": 16000 },
+  "parallel": 4,
+  "retries": 3,
+  "batchMinArticles": 10,
+  "pricesPerMillionTokens": {
+    "claude-haiku-5-5": { "input": 0.1, "output": 0.5, "typicalOutputTokens": 15000 },
+    "claude-haiku-4-5": { "input": 1, "output": 5, "typicalOutputTokens": 5000 },
+    "claude-sonnet-5-5": { "input": 2, "output": 10, "typicalOutputTokens": 5000 },
+    "claude-opus-5-5": { "input": 4, "output": 20, "typicalOutputTokens": 6000 },
+    "gemini-3.1-flash-lite": { "input": 0.25, "output": 1.5, "typicalOutputTokens": 3000 },
+    "gemini-3.5-flash-lite": { "input": 0.3, "output": 2.5, "typicalOutputTokens": 3000 },
+    "gemini-2.5-flash": { "input": 0.3, "output": 2.5, "typicalOutputTokens": 5000 },
+    "gpt-4o": { "input": 2.5, "output": 10, "typicalOutputTokens": 3500 }
+  }
+}

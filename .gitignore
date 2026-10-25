@@ -22,6 +22,7 @@ screenshots/
 # Environment variables
 .env
 .env.local
+config/api-keys.txt
 client-config.json
 
 # IDE
@@ -37,3 +38,8 @@ Thumbs.db
 
 # Client tool packages (contain client-config.json credentials)
 linkedin-publisher-client-tools*.zip
+
+# Content generator: its run record (Batch Monitor.xlsx) and client packages (they contain API keys)
+Batch Monitor.xlsx
+.Batch Monitor.xlsx.unsaved.json
+content-generator-client*.zip

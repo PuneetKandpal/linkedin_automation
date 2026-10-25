@@ -27,6 +27,10 @@ export interface LoggerOptions {
    * If provided, we also maintain a stable "latest" pointer to the newest run.
    */
   latestLogPath?: string;
+  /**
+   * Set to false to keep log lines out of the terminal (the log files still get them). Default: true.
+   */
+  console?: boolean;
 }
 
 function safeStringify(value: unknown): string {
@@ -87,7 +91,7 @@ export class Logger {
     });
 
     const transports: winston.transport[] = [
-      new winston.transports.Console({}),
+      ...(options?.console === false ? [] : [new winston.transports.Console({})]),
       new DailyRotateFile({
         filename: resolve(logDir, 'app-%DATE%.log'),
         datePattern: 'YYYY-MM-DD',

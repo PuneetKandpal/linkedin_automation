@@ -1441,10 +1441,14 @@ async function main() {
   }));
 
   app.get('/cleanup/articles', asyncHandler(async (req: Request, res: Response) => {
-    const { deleteOldArticles, getCleanupAuthKey } = await import('./services/articleCleanup');
-    
+    const { deleteOldArticles, getCleanupAuthKey, getArticleRetentionHours } = await import('./services/articleCleanup');
+
+    const expectedKey = getCleanupAuthKey();
+    if (!expectedKey) {
+      return res.status(503).json({ error: 'Manual cleanup is disabled (CLEANUP_AUTH_KEY not set)' });
+    }
     const authKey = req.query.key as string;
-    if (!authKey || authKey !== getCleanupAuthKey()) {
+    if (!authKey || authKey !== expectedKey) {
       return res.status(401).json({ error: 'Invalid or missing auth key' });
     }
     
@@ -1455,7 +1459,7 @@ async function main() {
         articlesDeleted: result.articlesDeleted,
         jobsDeleted: result.jobsDeleted,
         issuesDeleted: result.issuesDeleted,
-        note: `Deleted articles older than 48 hours and all related publish jobs and account issues`
+        note: `Deleted published/failed articles with no activity for ${getArticleRetentionHours()} hours, their finished publish jobs, and account issues older than 24 hours`
       });
     } catch (error) {
       logger.error('Manual article cleanup failed', { error: String(error) });
